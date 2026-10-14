@@ -1,0 +1,27 @@
+{
+  "name": "ashenfell",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "tsc --noEmit && vite build",
+    "build:pages": "tsc --noEmit && vite build --mode pages",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "vitest run",
+    "dev:cloudflare": "npm run build && wrangler dev --ip 0.0.0.0 --port 8787",
+    "deploy": "npm run build && wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261014.1",
+    "@playwright/test": "^1.56.0",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.9",
+    "vitest": "^5.0.4",
+    "wrangler": "^4.42.0"
+  },
+  "dependencies": {
+    "@fontsource/noto-sans-jp": "^5.3.1",
+    "@fontsource/noto-serif-jp": "^5.3.1"
+  }
+}

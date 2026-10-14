@@ -1,1 +1,131 @@
-# game
+# ASHENFELL — 灰の境界
+
+中世ヨーロッパ風の森と廃村を舞台にした、2D見下ろし型の脱出ゲームです。ブラウザだけで遊べるソロPvEと、Cloudflare Durable Objectsで同期する最大8人のPvPvEを実装しています。
+
+> 既存作品の画像・音声・キャラクター・名称は使用していません。脱出型ゲームの基本ループを参考にした、オリジナルの小規模プロトタイプです。
+
+## ブラウザで遊ぶ / GitHubで公開する
+
+**GitHub Pagesの公開先（デプロイ成功後に有効）:** https://studylikelazy.github.io/game/
+
+- GitHub Pages版は **ソロPvE専用** です。静的ホスティングのため、オンライン対戦サーバーは動きません。
+- `arena/68fdc8a7-game` または `main` にpushすると、[Test and publish game](https://github.com/studylikelazy/game/actions/workflows/pages.yml) がテスト・ビルド・公開を行います。
+- ワークフローではPagesの自動有効化を試みます。権限不足で公開に失敗した場合は、リポジトリ所有者が以下を設定してください。
+  1. [Settings → Pages](https://github.com/studylikelazy/game/settings/pages) を開く。
+  2. **Build and deployment → Source → GitHub Actions** を選択する。
+  3. `Settings → Environments → github-pages` に公開ブランチ制限がある場合、`arena/68fdc8a7-game` を許可する。
+  4. Actionsの失敗した実行を開き、**Re-run failed jobs** を押す。
+- ワークフローがまだ既定ブランチにないと「Run workflow」が表示されないことがあります。その場合も既存実行の再実行、または作業ブランチへのpushで起動できます。
+- 秘密情報やアクセストークンをゲームのソースコードに書く必要はありません。
+
+## ゲームの流れ
+
+1. 剣または刀を選び、**出撃する**を押す。長弓・矢24本・治療薬3個も支給されます。
+2. 木箱、薬草、敵の所持品から物資を回収する。
+3. 野盗、狼、騎士と戦う。オンラインでは他の旅人にも攻撃が当たります。
+4. 12分以内に3か所ある脱出地点のいずれかで **Eを5秒間長押し**する。
+5. 帰還すると戦利品が倉庫に入り、商人への売却や依頼報酬の受け取りができます。
+
+死亡・時間切れ・遠征放棄・オンライン切断では未脱出の戦利品を失います。支給装備と拠点の倉庫は失いません。オンライン参加者は同じ合言葉で同じ戦場に入ります。
+
+### 操作
+
+| 操作 | キー |
+| --- | --- |
+| 移動 | WASD / 矢印キー |
+| 照準 | マウス |
+| 近接攻撃・射撃 | 左クリック |
+| ダッシュ | Shift |
+| 回避 | Space |
+| 剣・刀 / 弓 | 1 / 2 |
+| 治療薬 | Q |
+| 回収・脱出 | E（脱出は長押し） |
+| バックパック | Tab |
+| 全体マップ | M |
+| メニュー | Esc |
+| 操作ガイド | ? |
+
+タッチ端末には方向・攻撃・回避・回収ボタンが表示されます。タッチでの照準は移動方向です。ソロではメニュー表示中に一時停止し、オンラインでは進行を続けます。
+
+## ローカル開発
+
+Node.js 22以上を使用してください。
+
+```sh
+npm ci
+npm run dev
+```
+
+Viteのソロ開発環境です。オンラインAPIはポート8787へプロキシします。
+
+### オンラインを含めて動かす
+
+```sh
+npm run dev:cloudflare
+```
+
+http://localhost:8787/ を開きます。Wranglerが静的ファイルとDurable Objectsをローカルで実行します。同じ合言葉で別のブラウザやタブから参加できます。外部プレビュー用に `0.0.0.0` へバインドしており、ブラウザ内のAPI URLは同一オリジンです。
+
+```sh
+npm test             # 戦闘・移動・回収・脱出・入力検証・セーブの24テスト
+npm run build        # Cloudflare版：ルートパス / 向け
+npm run build:pages  # GitHub Pages版：/game/ 向け・ソロ専用
+npm audit            # 依存関係の脆弱性チェック
+```
+
+## Cloudflareへ公開する（PvPvE対応）
+
+GitHub Pagesとは別の公開方法です。GitHubのコードを使って、Workersへフロントエンドとサーバーをまとめて公開します。
+
+### 手元の端末から公開
+
+```sh
+npm ci
+npx wrangler login
+npm run deploy
+```
+
+認証は手元のブラウザで行ってください。認証情報をチャット・GitHubのファイルへ貼らないでください。公開後の `workers.dev` URLはWranglerが表示します。
+
+### Cloudflare管理画面とGitHubを連携する場合
+
+1. Workers & Pagesから新しい **Worker** を作成し、このGitHubリポジトリを選択する。
+2. 公開するブランチに `arena/68fdc8a7-game` を指定する（PRをマージした後は `main` も使用可能）。
+3. ビルドコマンド：`npm ci && npm run build`
+4. デプロイコマンド：`npx wrangler deploy`
+5. ルートディレクトリ：リポジトリのルート。
+
+`wrangler.jsonc` が静的アセット、`RAID_ROOMS` Durable Objectバインディング、SQLiteクラスの初回マイグレーションを設定します。Cloudflare側でGitHubへのアクセス許可とWorkers作成権限が必要です。利用料金はCloudflareのプラン・CPU時間・接続時間等に依存します。
+
+**注意:** PvPvE版はCloudflare **Workers + Static Assets** 用です。`dist`だけを静的Pagesへアップロードしても対戦APIは動きません。
+
+## 実装内容と現時点の制約
+
+- Canvas 2Dによるオリジナルの地形、建築、樹木、キャラクター、効果。
+- 剣・刀の近接判定、弓の飛翔体、建物衝突、スタミナ、回避、回復。
+- 3種類の敵AI、共有物資、12枠/22kgの背嚢、5秒の脱出待機。
+- WebSocketは20Hzで同期し、移動速度・戦闘・命中・物資回収をサーバーが判定。入力値はサーバーで検証します。
+- 1戦場最大8接続。空になった部屋は次の参加時にリセット。残り60秒未満の部屋への新規参加は受け付けません。
+- 倉庫・銀貨・依頼・設定は **localStorage保存** です。別の端末・ブラウザ・公開ドメインには引き継がれません。
+- アカウント認証、サーバー保存の経済、ランク、対戦マッチング、切断復帰、高度な不正対策は未実装です。ローカルセーブは改変可能なので、競技・課金向けの完成版ではありません。
+- 戦場の状態はメモリ上で保持します。Worker更新・再起動で進行中の遠征は失われます。
+- 敵AIは簡易追跡で、建物を迂回する高度な経路探索はありません。
+- 初期装備は無料。商人は戦利品の売却のみで、装備購入・クラフト・保険はまだありません。
+- ネットワークゲームの長時間・大規模負荷テストは未実施です。
+
+## ファイル構成
+
+```text
+src/game.ts             クライアント/サーバー共通のゲームロジック
+src/renderer.ts         Canvas描画
+src/main.ts             UI・入力・ゲーム進行・WebSocketクライアント
+src/save.ts             ローカルセーブの検証・読み書き
+src/icons.ts            オリジナルSVGアイコン
+src/style.css           レスポンシブUI
+worker/index.ts         Cloudflare WorkerとDurable Object
+.github/workflows/      GitHub Actionsによるテスト・Pages公開
+```
+
+## フォント
+
+Noto Sans JP / Noto Serif JPを同梱しています（SIL Open Font License 1.1）。ライセンスは `public/licenses/` にあります。外部のフォントCDNには依存しません。
