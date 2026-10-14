@@ -14,6 +14,8 @@ let socket: WebSocket | null = null, connecting = false, resultShown = false, se
 let onlineAvailable = false;
 const keys = new Set<string>();
 const input = idleInput();
+let aimPointer: number | null = null, mouseAttack = false;
+const coarsePointer = () => matchMedia('(pointer: coarse)').matches;
 const fmt = (n: number) => n.toLocaleString('ja-JP');
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const contracts = [
@@ -45,7 +47,7 @@ app.innerHTML = `
       <section class="page-heading"><div><div class="eyebrow"><span></span> THE BORDERLANDS AWAIT</div><h1>次の遠征へ<span class="heading-dot">.</span></h1><p>生き延びろ。奪え。そして、持ち帰れ。</p></div><div class="mode-control"><span class="mode-label">プレイモード</span><div class="segmented" role="group" aria-label="プレイモード"><button class="selected" id="solo-mode">${icon('shield')}ソロ <span>PvE</span></button><button id="online-mode">${icon('users')}オンライン <span>PvPvE</span></button></div></div></section>
       <div class="raid-layout">
         <section class="map-panel" aria-label="黒松の辺境 戦場マップ">
-          <canvas id="world" tabindex="0" aria-label="ゲーム画面。WASDで移動、マウスで照準、クリックで攻撃。出撃ボタンで開始。"></canvas>
+          <canvas id="world" tabindex="0" aria-label="ゲーム画面。WASDで移動、マウスで照準、クリックで攻撃。タッチ端末ではパッドとボタンで操作します。出撃ボタンで開始。"></canvas>
           <div class="map-top"><div class="map-tag"><span class="live-dot"></span><span id="map-status">出撃可能エリア</span></div><button class="map-expand" id="map-button" title="戦域マップ (M)">${icon('compass')}<span>戦域情報</span></button></div>
           <div class="map-title" id="map-title"><div class="map-region">THE NORTHERN MARCHES <span>— 01</span></div><h2>黒松の辺境</h2><p>BLACKPINE FRONTIER</p><div class="map-chips"><span>${icon('clock')}12分</span><span>${icon('skull')}危険度：中</span><span>${icon('exit')}脱出地点 3</span></div></div>
           <div class="north">N<span>⌃</span><i></i></div>
@@ -90,7 +92,7 @@ function closeModal() {
   document.querySelectorAll<HTMLElement>('[data-nav]').forEach(el => el.classList.toggle('active', el.dataset.nav === 'raid' && el.classList.contains('nav-item')));
   if (playing) $('world').focus();
 }
-function help() { openModal('help', '生き延びるために', 'FIELD GUIDE', `<div class="guide-intro">${icon('compass')}<p>ここは、王国が見捨てた灰の辺境。<br>物資を探し、敵を退け、<strong>脱出地点でEを5秒間</strong>押し続けて帰還しましょう。</p></div><div class="guide-steps"><div><b>01</b><h3>準備する</h3><p>剣か刀を選択。弓と治療薬は毎回支給されます。</p></div><div><b>02</b><h3>探索する</h3><p>木箱・薬草・倒した敵の近くでE。12枠・22kgまで。</p></div><div><b>03</b><h3>帰還する</h3><p>マップの緑の出口へ。帰還した物資は倉庫で保管。</p></div></div><div class="key-guide">${[['W A S D / ↑↓←→', '移動'], ['マウス', '照準'], ['左クリック', '攻撃・射撃'], ['Shift', '走る · スタミナ消費'], ['Space', '回避 · 短時間無敵'], ['1 / 2', '近接武器 / 弓'], ['Q', '治療薬 · HP +45'], ['E 長押し', '物資回収 / 脱出'], ['Tab', 'バックパック'], ['M', '戦域マップ'], ['Esc', 'メニュー · ソロのみ一時停止']].map(([k, v]) => `<div><kbd>${k}</kbd><span>${v}</span></div>`).join('')}</div><div class="notice">時間切れ・死亡・遠征の放棄では戦利品を失います。初期装備は無料で再支給されます。タッチ操作では移動方向に照準が向きます。</div><button class="primary-button full" id="guide-done">準備はできた ${icon('chevron')}</button>`); $('guide-done').onclick = closeModal; }
+function help() { openModal('help', '生き延びるために', 'FIELD GUIDE', `<div class="guide-intro">${icon('compass')}<p>ここは、王国が見捨てた灰の辺境。<br>物資を探し、敵を退け、<strong>脱出地点でEを5秒間</strong>押し続けて帰還しましょう。</p></div><div class="guide-steps"><div><b>01</b><h3>準備する</h3><p>剣か刀を選択。弓と治療薬は毎回支給されます。</p></div><div><b>02</b><h3>探索する</h3><p>木箱・薬草・倒した敵の近くでE。12枠・22kgまで。</p></div><div><b>03</b><h3>帰還する</h3><p>マップの緑の出口へ。帰還した物資は倉庫で保管。</p></div></div><div class="key-guide">${[['W A S D / ↑↓←→', '移動'], ['マウス', '照準'], ['左クリック', '攻撃・射撃'], ['Shift', '走る · スタミナ消費'], ['Space', '回避 · 短時間無敵'], ['1 / 2', '近接武器 / 弓'], ['Q', '治療薬 · HP +45'], ['E 長押し', '物資回収 / 脱出'], ['Tab', 'バックパック'], ['M', '戦域マップ'], ['Esc', 'メニュー · ソロのみ一時停止']].map(([k, v]) => `<div><kbd>${k}</kbd><span>${v}</span></div>`).join('')}</div><div class="notice">時間切れ・死亡・遠征の放棄では戦利品を失います。初期装備は無料で再支給されます。タッチ端末では左下のパッドで移動、右下のボタンで攻撃・回避・回収。画面をドラッグして照準を合わせ、攻撃ボタンは近くの敵へ自動照準します。</div><button class="primary-button full" id="guide-done">準備はできた ${icon('chevron')}</button>`); $('guide-done').onclick = closeModal; }
 function stash() {
   const total = bagValue(save.stash);
   openModal('stash', '旅人の倉庫', 'YOUR STASH', `<div class="stash-summary"><span>保管物資 <b>${save.stash.length}</b></span><span>売却価値 <b>${fmt(total)} 銀貨</b></span></div>${save.stash.length ? `<div class="item-grid">${save.stash.map(i => `<div class="item-card ${ITEMS[i.kind].rarity}">${icon(i.kind)}<b>${ITEMS[i.kind].name}</b><small>×${i.amount} · ${fmt(ITEMS[i.kind].value * i.amount)} 銀貨</small></div>`).join('')}</div><button class="primary-button full" id="visit-trader">商人と取引する ${icon('chevron')}</button>` : `<div class="empty-state">${icon('stash')}<h3>物語は、空の背嚢から。</h3><p>遠征で手に入れた物資は、無事に帰還するとここへ保管されます。</p><button class="primary-button" id="stash-start">遠征の準備へ ${icon('chevron')}</button></div>`}<p class="muted">倉庫と進行状況はこのブラウザに保存されます。オンライン時も経済データはローカル管理です。</p>`);
@@ -125,6 +127,12 @@ function setMode(next: 'solo' | 'online') {
   $('deploy-note').textContent = next === 'solo' ? '倒れると、遠征中の戦利品を失います。' : '同じ合言葉の旅人とPvPvE。最大8人。';
 }
 function getPlayer() { return game.players.find(p => p.id === playerId); }
+function nearestTarget(p: Player, range: number): { x: number; y: number } | null {
+  let best: { x: number; y: number } | null = null, bestD = range;
+  for (const e of game.enemies) { if (e.hp <= 0) continue; const d = distance(p, e); if (d < bestD) { bestD = d; best = e; } }
+  for (const o of game.players) { if (o.id === playerId || o.status !== 'alive') continue; const d = distance(p, o); if (d < bestD) { bestD = d; best = o; } }
+  return best;
+}
 function setPrimary() { if (playing || connecting) return; primary = primary === 'sword' ? 'katana' : 'sword'; $('weapon-name').textContent = WEAPONS[primary].name; $('weapon-detail').textContent = primary === 'sword' ? '斬撃 28 · 片手剣' : '斬撃 22 · 高速連撃'; document.querySelector('.weapon-illustration')!.innerHTML = icon(primary); input.weapon = primary; tone(360); }
 function enterRaid() {
   playing = true; paused = false; resultShown = false; mapOpen = false; bagOpen = false; gameStartedAt = game.time; accumulator = 0; lastSwing = 0; lastHp = 100; lastBag = 0; currentModal = ''; $('modal-root').innerHTML = ''; clearInput(); input.weapon = primary;
@@ -164,7 +172,7 @@ function finishRaid(p: Player) {
   const elapsed = Math.floor(game.time - gameStartedAt);
   openModal('result', survived ? '灰の向こうへ、生還。' : '辺境に、名を残して。', survived ? 'EXTRACTION SUCCESSFUL' : 'LOST IN THE FRONTIER', `<div class="result-emblem ${survived ? 'success' : 'failure'}">${icon(survived ? 'exit' : 'skull')}</div><p class="center muted">${survived ? '戦利品は倉庫に届けられました。次の物語は、焚き火のそばで。' : game.ended ? '遠征時間が終了しました。戦利品は失われました。' : '倒れてしまいました。戦利品は失われましたが、次の遠征が待っています。'}</p><div class="result-stats"><div><small>遠征時間</small><b>${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}</b></div><div><small>討伐数</small><b>${p.kills}</b></div><div><small>持ち帰り価値</small><b>${survived ? fmt(bagValue(p.bag)) : 0}<small> 銀貨</small></b></div></div>${survived && p.bag.length ? `<div class="result-loot">${p.bag.map(i => `<span class="${ITEMS[i.kind].rarity}">${icon(i.kind)}${ITEMS[i.kind].name} ×${i.amount}</span>`).join('')}</div>` : ''}<button class="primary-button full" id="return-base">拠点へ戻る ${icon('chevron')}</button>`, 'result-modal'); $('return-base').onclick = returnToBase;
 }
-function clearInput() { keys.clear(); input.x = 0; input.y = 0; input.attack = false; input.interact = false; input.heal = false; input.dodge = false; input.sprint = false; touchState.attack = false; touchState.interact = false; touchState.dodge = false; }
+function clearInput() { keys.clear(); input.x = 0; input.y = 0; input.attack = false; input.interact = false; input.heal = false; input.dodge = false; input.sprint = false; mouseAttack = false; aimPointer = null; touchState.attack = false; touchState.interact = false; touchState.dodge = false; }
 function toggleMap() { if (!playing) { openModal('map-info', '黒松の辺境', 'THE NORTHERN MARCHES', `<div class="map-info-art">${icon('compass')}</div><p class="modal-description">古い交易路に沿って、朽ちた村と修道院が点在する森林地帯。野盗と狼が徘徊し、価値ある遺物が打ち捨てられています。</p><div class="guide-steps"><div><b>01</b><h3>巡礼者の小道</h3><p>南西。出撃地点から最も近い脱出路。</p></div><div><b>02</b><h3>北の見張り門</h3><p>北東。修道院の先にある古い門。</p></div><div><b>03</b><h3>渡し守の桟橋</h3><p>南東。野営地を越え、川沿いへ。</p></div></div><div class="notice">12分以内に帰還してください。戦場ではMキーで全体マップを表示できます。川は浅瀬として通行可能です。</div>`); } else if (!currentModal) { mapOpen = !mapOpen; } }
 function updateHUD() {
   const p = getPlayer(); if (!p) return;
@@ -210,9 +218,19 @@ window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
 window.addEventListener('blur', () => { clearInput(); if (playing && mode === 'solo' && !currentModal) pauseMenu(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) { clearInput(); if (playing && mode === 'solo' && !currentModal) pauseMenu(); } });
 const canvas = $<HTMLCanvasElement>('world');
-canvas.addEventListener('pointermove', e => { if (!playing || currentModal) return; const rect = canvas.getBoundingClientRect(), pos = renderer.screenToWorld(e.clientX - rect.left, e.clientY - rect.top), p = getPlayer(); if (p) input.angle = Math.atan2(pos.y - p.y, pos.x - p.x); });
-canvas.addEventListener('pointerdown', e => { if (e.button === 0 && playing && !currentModal) { input.attack = true; canvas.focus(); canvas.setPointerCapture(e.pointerId); } });
-window.addEventListener('pointerup', () => { input.attack = false; });
+const aimAt = (e: PointerEvent) => { const rect = canvas.getBoundingClientRect(), pos = renderer.screenToWorld(e.clientX - rect.left, e.clientY - rect.top), p = getPlayer(); if (p) input.angle = Math.atan2(pos.y - p.y, pos.x - p.x); };
+canvas.addEventListener('pointermove', e => { if (!playing || currentModal) return; if (e.pointerType === 'mouse' || aimPointer === e.pointerId) aimAt(e); });
+canvas.addEventListener('pointerdown', e => {
+  if (!playing || currentModal) return;
+  canvas.focus();
+  if (e.pointerType === 'mouse') {
+    if (e.button === 0) { mouseAttack = true; canvas.setPointerCapture(e.pointerId); }
+  } else {
+    // Touch/pen drags on the canvas steer the aim; the round button handles attacking.
+    aimPointer = e.pointerId; canvas.setPointerCapture(e.pointerId); aimAt(e);
+  }
+});
+window.addEventListener('pointerup', e => { if (e.pointerType === 'mouse') mouseAttack = false; if (aimPointer === e.pointerId) aimPointer = null; });
 canvas.addEventListener('pointercancel', clearInput);
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 const touchState = { attack: false, interact: false, dodge: false };
@@ -227,8 +245,15 @@ function frame(now: number) {
       input.x = Number(keys.has('d') || keys.has('arrowright')) - Number(keys.has('a') || keys.has('arrowleft'));
       input.y = Number(keys.has('s') || keys.has('arrowdown')) - Number(keys.has('w') || keys.has('arrowup'));
       input.sprint = keys.has('shift'); input.interact = keys.has('e') || touchState.interact; input.dodge = keys.has(' ') || touchState.dodge; input.heal = keys.has('q') || input.heal;
-      if (touchState.attack) input.attack = true;
-      if (matchMedia('(pointer: coarse)').matches && (input.x || input.y)) input.angle = Math.atan2(input.y, input.x);
+      input.attack = mouseAttack || touchState.attack;
+      if (coarsePointer()) {
+        if (touchState.attack && p && aimPointer === null) {
+          // Touch aim assist: snap toward the nearest target in range while the attack button is held.
+          const target = nearestTarget(p, input.weapon === 'bow' ? 560 : 150);
+          if (target) input.angle = Math.atan2(target.y - p.y, target.x - p.x);
+          else if (input.x || input.y) input.angle = Math.atan2(input.y, input.x);
+        } else if ((input.x || input.y) && aimPointer === null) input.angle = Math.atan2(input.y, input.x);
+      }
     }
     if (mode === 'solo' && !paused && p) {
       accumulator += delta; p.input = { ...input }; while (accumulator >= 1 / 60) { stepGame(game, 1 / 60); accumulator -= 1 / 60; }

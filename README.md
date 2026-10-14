@@ -9,11 +9,11 @@
 **GitHub Pagesの公開先（デプロイ成功後に有効）:** https://studylikelazy.github.io/game/
 
 - GitHub Pages版は **ソロPvE専用** です。静的ホスティングのため、オンライン対戦サーバーは動きません。
-- `arena/68fdc8a7-game` または `main` にpushすると、[Test and publish game](https://github.com/studylikelazy/game/actions/workflows/pages.yml) がテスト・ビルド・公開を行います。
+- `arena/24efa9d6-game` または `main` にpushすると、[Test and publish game](https://github.com/studylikelazy/game/actions/workflows/pages.yml) がテスト・ビルド・公開を行います。
 - ワークフローではPagesの自動有効化を試みます。権限不足で公開に失敗した場合は、リポジトリ所有者が以下を設定してください。
   1. [Settings → Pages](https://github.com/studylikelazy/game/settings/pages) を開く。
   2. **Build and deployment → Source → GitHub Actions** を選択する。
-  3. `Settings → Environments → github-pages` に公開ブランチ制限がある場合、`arena/68fdc8a7-game` を許可する。
+  3. `Settings → Environments → github-pages` に公開ブランチ制限がある場合、`arena/24efa9d6-game` を許可する。
   4. Actionsの失敗した実行を開き、**Re-run failed jobs** を押す。
 - ワークフローがまだ既定ブランチにないと「Run workflow」が表示されないことがあります。その場合も既存実行の再実行、または作業ブランチへのpushで起動できます。
 - 秘密情報やアクセストークンをゲームのソースコードに書く必要はありません。
@@ -45,7 +45,7 @@
 | メニュー | Esc |
 | 操作ガイド | ? |
 
-タッチ端末には方向・攻撃・回避・回収ボタンが表示されます。タッチでの照準は移動方向です。ソロではメニュー表示中に一時停止し、オンラインでは進行を続けます。
+タッチ端末には移動パッド・攻撃・回避・回収ボタンが表示されます。画面上をドラッグして照準を合わせられ、攻撃ボタンは射程内の最も近い敵へ自動で照準します。移動しながらの照準は移動方向です。ソロではメニュー表示中に一時停止し、オンラインでは進行を続けます。モバイルではセーフエリア（ノッチ）や横向き表示にも対応しています。
 
 ## ローカル開発
 
@@ -90,7 +90,7 @@ npm run deploy
 ### Cloudflare管理画面とGitHubを連携する場合
 
 1. Workers & Pagesから新しい **Worker** を作成し、このGitHubリポジトリを選択する。
-2. 公開するブランチに `arena/68fdc8a7-game` を指定する（PRをマージした後は `main` も使用可能）。
+2. 公開するブランチに `arena/24efa9d6-game` を指定する（PRをマージした後は `main` も使用可能）。
 3. ビルドコマンド：`npm ci && npm run build`
 4. デプロイコマンド：`npx wrangler deploy`
 5. ルートディレクトリ：リポジトリのルート。
@@ -102,6 +102,7 @@ npm run deploy
 ## 実装内容と現時点の制約
 
 - Canvas 2Dによるオリジナルの地形、建築、樹木、キャラクター、効果。
+- モバイル対応：タッチ操作UI、攻撃時の自動照準アシスト、画面ドラッグでの照準、レスポンシブレイアウト、セーフエリア（ノッチ）・横向き表示対応。
 - 剣・刀の近接判定、弓の飛翔体、建物衝突、スタミナ、回避、回復。
 - 3種類の敵AI、共有物資、12枠/22kgの背嚢、5秒の脱出待機。
 - WebSocketは20Hzで同期し、移動速度・戦闘・命中・物資回収をサーバーが判定。入力値はサーバーで検証します。
