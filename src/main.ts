@@ -26,7 +26,88 @@ const contracts = [
   { id: 'gather', title: '灰の中の拾い物', desc: '物資を5点持ち帰る', icon: 'stash', goal: 5, value: () => save.collected, reward: 450 },
   { id: 'hunt', title: '小道の掃除人', desc: '敵を5体倒して帰還する', icon: 'sword', goal: 5, value: () => save.kills, reward: 600 },
 ];
-const portrait = `<svg viewBox="0 0 220 200" class="portrait-art" aria-hidden="true"><defs><radialGradient id="portraitGlow"><stop stop-color="#777b60" stop-opacity=".25"/><stop offset="1" stop-color="#777b60" stop-opacity="0"/></radialGradient><linearGradient id="steel" x2="1" y2="1"><stop stop-color="#b1b3a1"/><stop offset=".45" stop-color="#6a776e"/><stop offset="1" stop-color="#333f37"/></linearGradient><linearGradient id="cloak"><stop stop-color="#7c7c59"/><stop offset="1" stop-color="#343c2d"/></linearGradient></defs><circle cx="112" cy="107" r="100" fill="url(#portraitGlow)"/><path d="m164 30 5-17 4 17-3 142h-5Z" fill="#959d8d"/><path d="M155 148h26v5h-26Z" fill="#b2a77f"/><path d="m77 78-30 24-23 100h174l-29-95-26-26Z" fill="url(#cloak)"/><path d="m76 85 12 34-21 78H36l18-74Zm68 0-13 34 29 78h29l-28-73Z" fill="#6b745344"/><path d="m82 92 57-1 13 57-14 52H77l-9-53Z" fill="#424e45"/><path d="m83 104 24 10 32-12 9 22-38 14-36-12Z" fill="url(#steel)"/><path d="m80 133 27 9 35-11 3 19-37 11-32-12Z" fill="url(#steel)"/><path d="m80 155 27 9 36-9-6 24-30 9-29-11Z" fill="url(#steel)"/><path d="m49 104 30-13 7 28-33 11-11-9Zm93-13 30 14 9 17-14 8-30-12Z" fill="url(#steel)"/><path d="m83 47 7-23 20-10 23 12 9 22-4 47-27 14-28-16Z" fill="url(#steel)"/><path d="m110 15 1 92 25-14 5-45-9-22Z" fill="#35443e"/><path d="m86 54 22 6 27-7-1 10-26 5-21-6Z" fill="#141f1d"/><path d="m108 32-7 22 7 22 7-23Z" fill="#b3b3a0"/><path d="m87 71 15 6-1 15-13-8Zm31 8 15-7-2 14-13 7Z" fill="#788479"/><path d="m108 74-1 24" stroke="#c2c0a0"/><path d="m107 116-24 66 9 6 28-73Z" fill="#7f6945"/><path d="m92 151 13 5-5 14-13-5Z" fill="none" stroke="#b9a77b" stroke-width="3"/><path d="m45 134-12 51 14 15 16-5 2-25Z" fill="#596250"/><path d="m156 134 18 49-8 17-18-6-5-25Z" fill="#58614e"/></svg>`;
+const portrait = `<svg viewBox="0 0 220 200" class="portrait-art" aria-hidden="true"><defs>
+  <radialGradient id="pg" cx=".5" cy=".32"><stop stop-color="#8fa6c4" stop-opacity=".26"/><stop offset="1" stop-color="#8fa6c4" stop-opacity="0"/></radialGradient>
+  <radialGradient id="pe" cx=".5" cy=".5"><stop stop-color="#ffb966" stop-opacity=".34"/><stop offset="1" stop-color="#ff8a2e" stop-opacity="0"/></radialGradient>
+  <linearGradient id="phelm" x2=".65" y2="1"><stop stop-color="#a9b7c4"/><stop offset=".38" stop-color="#5d6977"/><stop offset="1" stop-color="#1a2029"/></linearGradient>
+  <linearGradient id="pcrown" x2=".55" y2="1"><stop stop-color="#cbd8e3"/><stop offset=".45" stop-color="#6d7b8a"/><stop offset="1" stop-color="#29313b"/></linearGradient>
+  <linearGradient id="pplate" x2=".5" y2="1"><stop stop-color="#8e9baa"/><stop offset=".48" stop-color="#49535f"/><stop offset="1" stop-color="#141920"/></linearGradient>
+  <linearGradient id="pshoulder" x2=".5" y2="1"><stop stop-color="#9aa8b6"/><stop offset=".5" stop-color="#4c5763"/><stop offset="1" stop-color="#1a1f27"/></linearGradient>
+  <linearGradient id="pcloak" x2=".3" y2="1"><stop stop-color="#333d4c"/><stop offset=".5" stop-color="#151a22"/><stop offset="1" stop-color="#06080e"/></linearGradient>
+  <linearGradient id="plining" x2=".4" y2="1"><stop stop-color="#93352a"/><stop offset="1" stop-color="#2a0e0a"/></linearGradient>
+  <linearGradient id="pgold" x2=".4" y2="1"><stop stop-color="#f6e9bb"/><stop offset=".45" stop-color="#c9a961"/><stop offset="1" stop-color="#6b5629"/></linearGradient>
+  <linearGradient id="pshield" x2=".45" y2="1"><stop stop-color="#7f8c9a"/><stop offset=".5" stop-color="#3f4955"/><stop offset="1" stop-color="#12171e"/></linearGradient>
+</defs>
+  <circle cx="110" cy="94" r="100" fill="url(#pg)"/>
+  <ellipse cx="110" cy="190" rx="88" ry="22" fill="url(#pe)"/>
+  <g opacity=".7">
+    <circle cx="34" cy="54" r="1.3" fill="#ffd9a0"/><circle cx="188" cy="42" r="1.1" fill="#ffd9a0"/>
+    <circle cx="56" cy="26" r=".9" fill="#ffd9a0"/><circle cx="178" cy="94" r="1.2" fill="#ffd9a0"/>
+    <circle cx="22" cy="122" r="1" fill="#ffd9a0"/><circle cx="200" cy="128" r="1" fill="#ffd9a0"/>
+    <circle cx="150" cy="14" r=".8" fill="#ffd9a0"/><circle cx="42" cy="152" r=".9" fill="#ffd9a0"/>
+  </g>
+  <!-- cloak mantle framing the figure -->
+  <path d="M110 104c-32 0-55 16-69 37-11 16-19 36-25 52h188c-6-16-14-36-25-52-14-21-37-37-69-37Z" fill="url(#pcloak)"/>
+  <path d="M110 112c-26 0-45 13-57 31 9 4 18 5 28 4 8-12 18-20 29-24Zm0 0c26 0 45 13 57 31-9 4-18 5-28 4-8-12-18-20-29-24Z" fill="url(#plining)" opacity=".45"/>
+  <path d="M110 176c-25 0-46-2-60-7l-3 9c15 5 39 8 63 8s48-3 63-8l-3-9c-14 5-35 7-60 7Z" fill="#070a0f" opacity=".85"/>
+  <!-- sword hilt rising over the left shoulder -->
+  <path d="M79 74l5-3 12 20-5 3Z" fill="#2a2118"/>
+  <path d="M86 66l14 22-7 4-14-22Z" fill="url(#pgold)"/>
+  <path d="M92 62l10 16-6 4-10-16Z" fill="#3a2c1c"/>
+  <circle cx="96" cy="60" r="4.4" fill="url(#pgold)"/>
+  <circle cx="96" cy="60" r="1.7" fill="#100d09"/>
+  <!-- heater shield leaning on the right -->
+  <path d="M152 116c11-3 23-2 31 4 1 18-5 33-17 42-11-9-16-24-14-46Z" fill="url(#pshield)"/>
+  <path d="M156 121c9-2 18-1 23 3 1 15-4 27-13 34-8-7-12-20-10-37Z" fill="#5b6774"/>
+  <path d="M158 126c7-2 14-1 18 2 1 11-3 21-10 27-6-6-9-16-8-29Z" fill="#39424d"/>
+  <circle cx="167" cy="140" r="4" fill="url(#pgold)"/>
+  <path d="M167 122v40" stroke="#c9a961" stroke-width="1.2" opacity=".5"/>
+  <path d="M150 168c11 4 25 5 37 2" stroke="#0b0f14" stroke-width="2" fill="none" opacity=".6"/>
+  <!-- neck guard -->
+  <path d="M97 74h26l-2 14c-4 4-18 4-22 0Z" fill="#10141b"/>
+  <!-- cuirass -->
+  <path d="M110 84c-14 0-24 5-24 12l2 34c2 12 11 19 22 19s20-7 22-19l2-34c0-7-10-12-24-12Z" fill="url(#pplate)"/>
+  <path d="M110 88c-11 0-19 4-20 9l2 30c2 10 9 16 18 16s16-6 18-16l2-30c-1-5-9-9-20-9Z" fill="#525d69"/>
+  <path d="M110 88v66" stroke="#0f141a" stroke-width="2" opacity=".35"/>
+  <path d="M92 96c4-3 11-5 18-5s14 2 18 5" stroke="url(#pgold)" stroke-width="1.6" fill="none" opacity=".85"/>
+  <path d="M110 96c2 10 3 22 2 34" stroke="url(#pgold)" stroke-width="1.2" fill="none" opacity=".5"/>
+  <path d="M96 100c3 6 3 14 1 20m27-20c-3 6-3 14-1 20" stroke="#2c343d" stroke-width="1.4" fill="none" opacity=".8"/>
+  <path d="M92 126h36v6H92Zm3 12h30v7H95Z" fill="#0d1117" opacity=".3"/>
+  <path d="M90 140c0 8 9 14 20 14s20-6 20-14l-2 12c-3 9-10 14-18 14s-15-5-18-14Z" fill="#0e131a"/>
+  <!-- pauldrons, three layers each -->
+  <path d="M74 90c-14 2-26 9-31 20-3 7-2 13 3 17 11-6 24-9 37-9 1-10-2-19-9-28Z" fill="url(#pshoulder)"/>
+  <path d="M146 90c14 2 26 9 31 20 3 7 2 13-3 17-11-6-24-9-37-9-1-10 2-19 9-28Z" fill="url(#pshoulder)"/>
+  <path d="M72 100c-11 3-20 9-24 18 9-5 19-8 30-9-1-3-3-6-6-9Zm76 0c11 3 20 9 24 18-9-5-19-8-30-9 1-3 3-6 6-9Z" fill="#2b333d"/>
+  <path d="M64 112c-8 3-14 8-17 14 8-4 17-7 27-8-1-2-4-4-10-6Zm92 0c8 3 14 8 17 14-8-4-17-7-27-8 1-2 4-4 10-6Z" fill="#212831"/>
+  <path d="M46 122c8-8 18-13 30-15M174 122c-8-8-18-13-30-15" stroke="url(#pgold)" stroke-width="1.8" fill="none" opacity=".9"/>
+  <circle cx="62" cy="116" r="2.4" fill="url(#pgold)"/><circle cx="158" cy="116" r="2.4" fill="url(#pgold)"/>
+  <circle cx="52" cy="126" r="2" fill="url(#pgold)"/><circle cx="168" cy="126" r="2" fill="url(#pgold)"/>
+  <!-- helm -->
+  <path d="M110 16c-20 0-33 14-33 34 0 8 1 14 4 20 3 7 6 12 9 16 6-3 13-4 20-4s14 1 20 4c3-4 6-9 9-16 3-6 4-12 4-20 0-20-13-34-33-34Z" fill="url(#pcrown)"/>
+  <path d="M110 24c-15 0-26 11-26 26 0 6 1 11 3 15 6-3 14-4 23-4s17 1 23 4c2-4 3-9 3-15 0-15-11-26-26-26Z" fill="url(#phelm)" opacity=".5"/>
+  <path d="M110 8c5 8 7 18 5 29-3-10-8-17-14-23Z" fill="url(#plining)"/>
+  <path d="M132 14c10 5 16 14 18 25-6-9-13-15-23-19Z" fill="url(#plining)" opacity=".7"/>
+  <path d="M107 18h6v56h-6Z" fill="#39424d" opacity=".55"/>
+  <path d="M110 26c-13 0-22 9-23 22 4-9 12-14 23-14s19 5 23 14c-1-13-10-22-23-22Z" fill="#d6e1ea" opacity=".24"/>
+  <!-- straight visor slit with two ember eyes -->
+  <path d="M92 42h36v5H92Z" fill="#04060a"/>
+  <path d="M94 43h32v1.4H94Z" fill="#a8e4ff" opacity=".28"/>
+  <ellipse cx="101" cy="44.5" rx="3" ry="1.6" fill="#ffb452"/>
+  <ellipse cx="119" cy="44.5" rx="3" ry="1.6" fill="#ffb452"/>
+  <ellipse cx="101" cy="44.5" rx="1.3" ry=".8" fill="#fff4d4"/>
+  <ellipse cx="119" cy="44.5" rx="1.3" ry=".8" fill="#fff4d4"/>
+  <!-- breathing holes and jaw line -->
+  <g fill="#12171e">
+    <circle cx="100" cy="58" r="1.3"/><circle cx="105" cy="58" r="1.3"/><circle cx="115" cy="58" r="1.3"/><circle cx="120" cy="58" r="1.3"/>
+    <circle cx="102.5" cy="63" r="1.1"/><circle cx="117.5" cy="63" r="1.1"/>
+  </g>
+  <path d="M92 66c5 4 11 6 18 6s13-2 18-6l-1 5c-5 4-10 5-17 5s-12-1-17-5Z" fill="#161c24"/>
+  <path d="M90 30c-3 7-3 14 0 19 1-7 3-13 6-18Zm40 0c3 7 3 14 0 19-1-7-3-13-6-18Z" fill="#2e3742"/>
+  <!-- moonlight rim, left side only -->
+  <path d="M79 40c-4 9-3 18 2 26-8-6-9-19-2-26Z" fill="#d3e3f2" opacity=".42"/>
+  <path d="M78 96c-11 4-20 11-24 20-1-12 9-19 24-20Z" fill="#d3e3f2" opacity=".26"/>
+  <path d="M110 174c-22 0-41-2-55-6 14 3 35 5 55 5s41-2 55-5c-14 4-33 6-55 6Z" fill="#ffb066" opacity=".16"/>
+</svg>`;
 
 app.innerHTML = `
   <aside class="rail">
