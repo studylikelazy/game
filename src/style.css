@@ -6,3 +6,4 @@
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
 
 .segmented button[aria-disabled="true"]{opacity:.45;cursor:help}
+.in-raid .map-top{right:64px}
