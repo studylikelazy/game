@@ -38,7 +38,12 @@ export class RaidRoom {
     // The client only sends the four facts that define each item; the server rolls the affixes again.
     let loadout = {};
     try { loadout = decodeLoadout(JSON.parse(url.searchParams.get('loadout') || 'null')); } catch { loadout = {}; }
-    addPlayer(this.game, id, name, primary, loadout);
+    const player = addPlayer(this.game, id, name, primary, loadout);
+    // Camp meta-progression, clamped and re-derived server-side like everything else the client claims.
+    const campLevel = (key: string) => Math.max(0, Math.min(3, parseInt(url.searchParams.get(key) ?? '0', 10) || 0));
+    player.heals += campLevel('campH');
+    player.arrows += 6 * campLevel('campA');
+    player.extractTime = 5 - .3 * campLevel('campS');
     this.clients.set(server, { id, lastInput: Date.now(), lastMessage: 0 });
     server.send(JSON.stringify({ type: 'joined', id, state: this.game }));
     server.addEventListener('message', (event: MessageEvent) => {

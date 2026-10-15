@@ -15,13 +15,17 @@ export interface Save {
   kills: number;
   collected: number;
   claimed: string[];
+  /** Permanent camp (hideout) upgrade levels, keyed by upgrade id. */
+  camp: Record<string, number>;
+  /** Today's rotating contract progress and claim flag. */
+  daily: { date: string; progress: number; claimed: boolean };
   volume: number;
   /** Environmental bed (wind, fire, wildlife) volume, kept separate from combat SFX. */
   ambientVolume: number;
   reducedMotion: boolean;
 }
 
-const initial = (): Save => ({ version: 2, name: '名もなき旅人', coins: 1250, stash: [], loadout: {}, meleeChoice: 'sword', raids: 0, escapes: 0, kills: 0, collected: 0, claimed: [], volume: .25, ambientVolume: .55, reducedMotion: false });
+const initial = (): Save => ({ version: 2, name: '名もなき旅人', coins: 1250, stash: [], loadout: {}, meleeChoice: 'sword', raids: 0, escapes: 0, kills: 0, collected: 0, claimed: [], camp: {}, daily: { date: '', progress: 0, claimed: false }, volume: .25, ambientVolume: .55, reducedMotion: false });
 
 const MATERIALS = Object.keys(ITEMS) as MaterialKind[];
 
@@ -65,6 +69,19 @@ export function loadSave(): Save {
     }
     safe.meleeChoice = raw.meleeChoice === 'katana' ? 'katana' : 'sword';
     safe.claimed = Array.isArray(raw.claimed) ? raw.claimed.filter((x: unknown) => typeof x === 'string').slice(0, 20) : [];
+    if (raw.camp && typeof raw.camp === 'object') {
+      for (const [id, level] of Object.entries(raw.camp as Record<string, unknown>)) {
+        if (/^[a-z0-9_-]{1,24}$/.test(id) && Number.isFinite(level) && (level as number) > 0) safe.camp[id] = Math.max(0, Math.min(3, Math.floor(level as number)));
+      }
+    }
+    if (raw.daily && typeof raw.daily === 'object') {
+      const daily = raw.daily as Record<string, unknown>;
+      safe.daily = {
+        date: typeof daily.date === 'string' ? daily.date.slice(0, 10) : '',
+        progress: Number.isFinite(daily.progress) ? Math.max(0, Math.min(100, Math.floor(daily.progress as number))) : 0,
+        claimed: daily.claimed === true,
+      };
+    }
     safe.volume = typeof raw.volume === 'number' && Number.isFinite(raw.volume) ? Math.max(0, Math.min(1, raw.volume)) : .25;
     safe.ambientVolume = typeof raw.ambientVolume === 'number' && Number.isFinite(raw.ambientVolume) ? Math.max(0, Math.min(1, raw.ambientVolume)) : .55;
     safe.reducedMotion = raw.reducedMotion === true;

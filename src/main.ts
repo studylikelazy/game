@@ -5,10 +5,12 @@ import './style.css';
 import './fantasy-ui.css';
 import { healingFlask, resourceOrbs, resourcePercent } from './hud';
 import { addPlayer, bagValue, bagWeight, distance, EXITS, idleInput, ITEMS, makeGame, meleeGear, bowGear, stepGame, STARTER_GEAR, starterMelee, equipInField, weaponDps, weaponKind, type GameState, type Player } from './game';
-import { RARITIES, SLOTS, SLOT_LABELS, baseOf, encodeLoadout, entryValue, globalStats, isGear, weaponProfile, type BagEntry, type Gear, type Material, type Slot } from './items';
+import { RARITIES, SLOTS, SLOT_LABELS, WEAPON_BY_ID, ARMOUR_BY_ID, baseOf, encodeLoadout, entryValue, globalStats, isGear, rollGear, weaponProfile, type BagEntry, type Gear, type Material, type Slot } from './items';
 import { entryCard, entryLabel, gearCard, gearTooltip, materialCard } from './itemcard';
 import { characterSheetHtml, gearSummary, slotGrid, SLOT_ICONS } from './gearui';
 import { icon, raven } from './icons';
+import { CAMP_UPGRADES, applyCampBonuses, campLevel, canAfford, nextCost, payFor, saleMultiplier, type CampCost } from './camp';
+import { dailyFor, recordDailyProgress, todayLocalIso } from './daily';
 import { audio } from './audio';
 import { attackStarted, type AttackSnapshot } from './combatAudio';
 import { FIRES, Renderer } from './renderer';
@@ -47,6 +49,7 @@ app.innerHTML = `
       <button class="nav-item active" data-nav="raid">${icon('compass')}<span>遠征</span></button>
       <button class="nav-item" data-nav="stash">${icon('stash')}<span>倉庫</span></button>
       <button class="nav-item" data-nav="quests">${icon('scroll')}<span>依頼</span><i class="notification-dot"></i></button>
+      <button class="nav-item" data-nav="camp">${icon('fire')}<span>拠点</span></button>
       <button class="nav-item" data-nav="trader">${icon('trader')}<span>商人</span></button>
     </nav>
     <div class="rail-bottom"><button class="nav-item" data-nav="help">${icon('help')}<span>遊び方</span></button><button class="nav-item" data-nav="settings">${icon('settings')}<span>設定</span></button><span class="version">v1.0</span></div>
@@ -97,7 +100,14 @@ document.addEventListener('visibilitychange', () => audio.setMuted(document.hidd
 let toastTimer: ReturnType<typeof setTimeout>;
 function toast(message: string) { $('toast').textContent = message; $('toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').classList.remove('visible'), 3500); }
 function persist() { document.body.classList.toggle('reduced-motion', save.reducedMotion); if (!storeSave(save)) toast('保存できませんでした。ブラウザのストレージ設定を確認してください。'); $('coins').textContent = fmt(save.coins); $('profile-name').textContent = save.name; $('level').textContent = String(1 + Math.floor(save.escapes / 3)); renderContracts(); }
-function renderContracts() { $('contract-grid').innerHTML = contracts.map((q, i) => `<button class="contract-card" data-contract="${q.id}"><div class="contract-icon">${icon(q.icon)}</div><div class="contract-text"><small>依頼 ${String(i + 1).padStart(2, '0')} <span>${save.claimed.includes(q.id) ? '達成済み' : '進行中'}</span></small><h3>${q.title}</h3><p>${q.desc}</p><div class="contract-progress"><i style="width:${Math.min(100, q.value() / q.goal * 100)}%"></i></div></div><div class="contract-reward">${icon('coin')}<b>${q.reward}</b><span>${Math.min(q.value(), q.goal)} / ${q.goal}</span></div></button>`).join(''); }
+function renderContracts() {
+  const today = todayLocalIso();
+  const task = dailyFor(today);
+  const progress = save.daily.date === today ? save.daily.progress : 0;
+  const dailyStatus = progress >= task.goal ? (save.daily.claimed ? '受取済み' : '達成！報酬を確認') : '進行中';
+  const dailyCard = `<button class="contract-card daily-card"><div class="contract-icon">${icon(task.icon)}</div><div class="contract-text"><small>日替わり · ${today.slice(5)} <span>${dailyStatus}</span></small><h3>${task.title}</h3><p>${task.desc}</p><div class="contract-progress"><i style="width:${Math.min(100, progress / task.goal * 100)}%"></i></div></div><div class="contract-reward">${icon('coin')}<b>${task.reward}</b><span>${Math.min(progress, task.goal)} / ${task.goal}</span></div></button>`;
+  $('contract-grid').innerHTML = dailyCard + contracts.map((q, i) => `<button class="contract-card" data-contract="${q.id}"><div class="contract-icon">${icon(q.icon)}</div><div class="contract-text"><small>依頼 ${String(i + 1).padStart(2, '0')} <span>${save.claimed.includes(q.id) ? '達成済み' : '進行中'}</span></small><h3>${q.title}</h3><p>${q.desc}</p><div class="contract-progress"><i style="width:${Math.min(100, q.value() / q.goal * 100)}%"></i></div></div><div class="contract-reward">${icon('coin')}<b>${q.reward}</b><span>${Math.min(q.value(), q.goal)} / ${q.goal}</span></div></button>`).join('');
+}
 renderContracts();
 function openModal(name: string, title: string, subtitle: string, content: string, extraClass = '') {
   clearInput(); currentModal = name; audio.ui('open');
@@ -123,23 +133,135 @@ function stash() {
   const gear = save.stash.filter(isGear);
   const materials = save.stash.filter((e): e is Material => !isGear(e));
   openModal('stash', '旅人の倉庫', 'YOUR STASH', `<div class="stash-summary"><span>保管物資 <b>${save.stash.length}</b></span><span>売却価値 <b>${fmt(total)} 銀貨</b></span></div>${save.stash.length ? `${gear.length ? `<h3 class="subheading">装備品 <span>${gear.length}点</span></h3><div class="item-grid">${gear.map(g => gearCard(g, `<button class="small-button" data-equip="${g.id}">装備する</button>`)).join('')}</div>` : ''}${materials.length ? `<h3 class="subheading">物資</h3><div class="item-grid">${materials.map(m => materialCard(m)).join('')}</div>` : ''}<button class="primary-button full" id="visit-trader">商人と取引する ${icon('chevron')}</button>` : `<div class="empty-state">${icon('stash')}<h3>物語は、空の背嚢から。</h3><p>遠征で手に入れた物資は、無事に帰還するとここへ保管されます。</p><button class="primary-button" id="stash-start">遠征の準備へ ${icon('chevron')}</button></div>`}<p class="muted">倉庫と進行状況はこのブラウザに保存されます。オンライン時も経済データはローカル管理です。</p>`);
-  if ($('visit-trader')) $('visit-trader').onclick = trader;
+  if ($('visit-trader')) $('visit-trader').onclick = () => trader();
   if ($('stash-start')) $('stash-start').onclick = closeModal;
   document.querySelectorAll<HTMLButtonElement>('[data-equip]').forEach(b => b.onclick = () => equipFromStash(b.dataset.equip!));
 }
 function quests() {
-  openModal('quests', '旅人への依頼', 'CONTRACT BOARD', `<p class="modal-description">境界の砦から届いた仕事。成果を持ち帰り、報酬を受け取ろう。</p><div class="quest-list">${contracts.map(q => `<div class="quest-row"><div class="quest-emblem">${icon(q.icon)}</div><div><h3>${q.title}</h3><p>${q.desc}</p><small>${Math.min(q.goal, q.value())} / ${q.goal}</small></div><div><b class="gold">${q.reward} 銀貨</b><button class="small-button" data-claim="${q.id}" ${q.value() < q.goal || save.claimed.includes(q.id) ? 'disabled' : ''}>${save.claimed.includes(q.id) ? '受取済み' : q.value() >= q.goal ? '報酬を受け取る' : '進行中'}</button></div></div>`).join('')}</div><div class="notice">討伐数は生還した遠征のみ記録されます。各依頼の報酬は一度だけ受け取れます。</div>`);
+  const today = todayLocalIso();
+  const task = dailyFor(today);
+  const progress = save.daily.date === today ? save.daily.progress : 0;
+  const claimed = save.daily.date === today && save.daily.claimed;
+  const done = progress >= task.goal;
+  const dailyRow = `<div class="quest-row daily-row"><div class="quest-emblem">${icon(task.icon)}</div><div><h3>${task.title}<span class="daily-tag">DAILY</span></h3><p>${task.desc}</p><small>${Math.min(task.goal, progress)} / ${task.goal}${claimed ? ' · 受取済み' : ''}</small></div><div><b class="gold">${task.reward} 銀貨</b><button class="small-button" data-claim-daily="1" ${!done || claimed ? 'disabled' : ''}>${claimed ? '受取済み' : done ? '報酬を受け取る' : '進行中'}</button></div></div>`;
+  openModal('quests', '旅人への依頼', 'CONTRACT BOARD', `<p class="modal-description">境界の砦から届いた仕事。成果を持ち帰り、報酬を受け取ろう。</p><h3 class="subheading">今日だけの仕事 <span>明日には替わります (${today})</span></h3><div class="quest-list">${dailyRow}</div><h3 class="subheading">長期の依頼 <span>STANDING CONTRACTS</span></h3><div class="quest-list">${contracts.map(q => `<div class="quest-row"><div class="quest-emblem">${icon(q.icon)}</div><div><h3>${q.title}</h3><p>${q.desc}</p><small>${Math.min(q.goal, q.value())} / ${q.goal}</small></div><div><b class="gold">${q.reward} 銀貨</b><button class="small-button" data-claim="${q.id}" ${q.value() < q.goal || save.claimed.includes(q.id) ? 'disabled' : ''}>${save.claimed.includes(q.id) ? '受取済み' : q.value() >= q.goal ? '報酬を受け取る' : '進行中'}</button></div></div>`).join('')}</div><div class="notice">討伐数は生還した遠征のみ記録されます。日替わりの報酬は当日のみ、長期依頼は一度だけ受け取れます。</div>`);
   document.querySelectorAll<HTMLButtonElement>('[data-claim]').forEach(b => b.onclick = () => { const q = contracts.find(q => q.id === b.dataset.claim)!; if (q.value() >= q.goal && !save.claimed.includes(q.id)) { save.coins += q.reward; save.claimed.push(q.id); persist(); quests(); audio.coin(); toast(`${q.reward}銀貨を受け取りました`); } });
+  const claimDaily = document.querySelector<HTMLButtonElement>('[data-claim-daily]');
+  if (claimDaily) claimDaily.onclick = () => {
+    if (save.daily.date !== today || save.daily.claimed || save.daily.progress < task.goal) return;
+    save.daily.claimed = true;
+    save.coins += task.reward;
+    persist();
+    quests();
+    audio.coin();
+    toast(`日替わりの報酬 ${task.reward}銀貨を受け取りました`);
+  };
 }
-function trader() {
+function trader(tab = 'sell') {
   const value = bagValue(save.stash);
   const materials = save.stash.filter((e): e is Material => !isGear(e));
   const gear = save.stash.filter(isGear);
   const kinds = Array.from(new Set(materials.map(m => m.kind)));
-  openModal('trader', '境界の行商人', 'THE TRAVELING MERCHANT', `<div class="merchant-quote">${icon('trader')}<p>「灰に埋もれたものにも、価値はある。<br>無事に帰ったのなら、見せてみな。」</p></div><div class="trade-balance">所持銀貨 <b>${fmt(save.coins)} ${icon('coin')}</b></div><h3 class="subheading">物資から売却</h3>${kinds.length ? `<div class="trade-items">${kinds.map(k => { const count = materials.filter(m => m.kind === k).reduce((s, i) => s + i.amount, 0); return `<div class="trade-row"><span class="trade-icon rarity-${ITEMS[k].rarity}">${icon(k)}</span><span><b>${ITEMS[k].name}</b><small>倉庫 ×${count}</small></span><button class="small-button" data-sell="${k}">すべて売る · ${fmt(count * ITEMS[k].value)}</button></div>`; }).join('')}</div>` : ''}${gear.length ? `<h3 class="subheading">装備品から売却</h3><div class="trade-items">${gear.map(g => `<div class="trade-row"><span class="trade-icon rarity-${g.rarity}">${icon(baseOf(g)?.icon ?? 'shield')}</span><span><b style="color:${RARITIES[g.rarity].color}">${g.name}</b><small>アイテムレベル ${g.ilvl} · ${RARITIES[g.rarity].label}</small></span><button class="small-button" data-sell-gear="${g.id}">売る · ${fmt(entryValue(g))}</button></div>`).join('')}</div>` : ''}${save.stash.length ? `<button class="primary-button full" id="sell-all">物資をすべて売却 ${icon('coin')} ${fmt(value)}</button>` : '<div class="trade-empty">売却できる物資がありません。遠征で探してみましょう。</div>'}<div class="notice">支給装備・矢・治療薬は毎回無料です。売却した銀貨と依頼報酬が旅の成果として蓄積されます。</div>`);
-  document.querySelectorAll<HTMLButtonElement>('[data-sell]').forEach(b => b.onclick = () => { const k = b.dataset.sell as keyof typeof ITEMS; const sold = save.stash.filter((i): i is Material => !isGear(i) && i.kind === k); save.coins += bagValue(sold); save.stash = save.stash.filter(i => isGear(i) || i.kind !== k); persist(); trader(); audio.coin(); toast(`${ITEMS[k].name}を売却しました`); });
-  document.querySelectorAll<HTMLButtonElement>('[data-sell-gear]').forEach(b => b.onclick = () => { const id = b.dataset.sellGear!; const gearEntry = save.stash.find((i): i is Gear => isGear(i) && i.id === id); if (!gearEntry) return; save.coins += entryValue(gearEntry); save.stash = save.stash.filter(i => !(isGear(i) && i.id === id)); persist(); trader(); audio.coin(); toast(`${gearEntry.name}を売却しました`); });
-  if ($('sell-all')) $('sell-all').onclick = () => { save.coins += bagValue(save.stash); save.stash = []; persist(); trader(); audio.coin(); toast('すべての物資を売却しました'); };
+  /** The parlour upgrade pays a little extra for everything sold here. */
+  const mult = saleMultiplier(save.camp);
+  const soldFor = (raw: number) => Math.max(1, Math.floor(raw * mult));
+  const shopGear = [
+    { base: 'sword', rarity: 'normal' as const, ilvl: 4, price: 120 },
+    { base: 'sword', rarity: 'magic' as const, ilvl: 6, price: 220 },
+    { base: 'katana', rarity: 'magic' as const, ilvl: 6, price: 220 },
+    { base: 'bow', rarity: 'magic' as const, ilvl: 6, price: 300 },
+    { base: 'chain_cuirass', rarity: 'magic' as const, ilvl: 8, price: 320 },
+    { base: 'traveller_cloak', rarity: 'normal' as const, ilvl: 4, price: 120 },
+    { base: 'steel_helm', rarity: 'magic' as const, ilvl: 6, price: 180 },
+    { base: 'axe', rarity: 'rare' as const, ilvl: 12, price: 620 },
+    { base: 'chain_cuirass', rarity: 'rare' as const, ilvl: 12, price: 680 },
+    { base: 'monk_robe', rarity: 'rare' as const, ilvl: 12, price: 720 },
+    { base: 'sword', rarity: 'unique' as const, ilvl: 15, price: 1500 },
+    { base: 'iron_buckler', rarity: 'unique' as const, ilvl: 15, price: 1200 },
+    { base: 'monk_robe', rarity: 'unique' as const, ilvl: 15, price: 1400 },
+  ];
+  const shopMaterials = [
+    { kind: 'iron' as const, amount: 5, price: 80 },
+    { kind: 'cloth' as const, amount: 5, price: 80 },
+    { kind: 'herb' as const, amount: 3, price: 90 },
+    { kind: 'relic' as const, amount: 1, price: 250 },
+  ];
+  const sellHtml = `<div class="trade-balance">所持銀貨 <b>${fmt(save.coins)} ${icon('coin')}</b></div>${mult > 1 ? `<div class="sale-bonus">${icon('trader')}商人の居間 ボーナス： 売却額 +${Math.round((mult - 1) * 100)}%</div>` : ''}
+    <h3 class="subheading">物資から売却</h3>${kinds.length ? `<div class="trade-items">${kinds.map(k => { const count = materials.filter(m => m.kind === k).reduce((s, i) => s + i.amount, 0); return `<div class="trade-row"><span class="trade-icon rarity-${ITEMS[k].rarity}">${icon(k)}</span><span><b>${ITEMS[k].name}</b><small>倉庫 ×${count}</small></span><button class="small-button" data-sell="${k}">すべて売る · ${fmt(soldFor(count * ITEMS[k].value))}</button></div>`; }).join('')}</div>` : ''}
+    ${gear.length ? `<h3 class="subheading">装備品から売却</h3><div class="trade-items">${gear.map(g => `<div class="trade-row"><span class="trade-icon rarity-${g.rarity}">${icon(baseOf(g)?.icon ?? 'shield')}</span><span><b style="color:${RARITIES[g.rarity].color}">${g.name}</b><small>アイテムレベル ${g.ilvl} · ${RARITIES[g.rarity].label}</small></span><button class="small-button" data-sell-gear="${g.id}">売る · ${fmt(soldFor(entryValue(g)))}</button></div>`).join('')}</div>` : ''}
+    ${save.stash.length ? `<button class="primary-button full" id="sell-all">物資をすべて売却 ${icon('coin')} ${fmt(soldFor(value))}</button>` : '<div class="trade-empty">売却できる物資がありません。遠征で探してみましょう。</div>'}`;
+  const buyHtml = `<div class="trade-balance">所持銀貨 <b>${fmt(save.coins)} ${icon('coin')}</b></div>
+    <h3 class="subheading">装備を購入</h3><div class="trade-items">${shopGear.map(sg => {
+      const base = WEAPON_BY_ID[sg.base] ?? ARMOUR_BY_ID[sg.base];
+      const name = base?.name ?? sg.base;
+      return `<div class="trade-row"><span class="trade-icon rarity-${sg.rarity}">${icon(base?.icon ?? 'shield')}</span><span><b style="color:${RARITIES[sg.rarity].color}">${name}</b><small>${RARITIES[sg.rarity].label} · Lv ${sg.ilvl} · ${fmt(sg.price)} 銀貨</small></span><button class="small-button" data-buy-gear="${sg.base}|${sg.rarity}|${sg.ilvl}|${sg.price}">購入</button></div>`;
+    }).join('')}</div>
+    <h3 class="subheading">物資を購入</h3><div class="trade-items">${shopMaterials.map(sm => `<div class="trade-row"><span class="trade-icon rarity-${ITEMS[sm.kind].rarity}">${icon(sm.kind)}</span><span><b>${ITEMS[sm.kind].name}</b><small>×${sm.amount} · ${fmt(sm.price)} 銀貨</small></span><button class="small-button" data-buy-material="${sm.kind}|${sm.amount}|${sm.price}">購入</button></div>`).join('')}</div>
+    <div class="notice">購入した装備は倉庫へ送られます。支給装備は無料です。</div>`;
+  openModal('trader', '境界の行商人', 'THE TRAVELING MERCHANT', `<div class="merchant-quote">${icon('trader')}<p>「灰に埋もれたものにも、価値はある。<br>無事に帰ったのなら、見せてみな。」</p></div>
+    <div class="trade-tabs"><button class="small-button ${tab === 'sell' ? 'selected' : ''}" data-trade-tab="sell">売却</button><button class="small-button ${tab === 'buy' ? 'selected' : ''}" data-trade-tab="buy">購入</button></div>
+    ${tab === 'buy' ? buyHtml : sellHtml}
+    <div class="notice">支給装備・矢・治療薬は毎回無料です。売却した銀貨と依頼報酬が旅の成果として蓄積されます。</div>`);
+  document.querySelectorAll<HTMLButtonElement>('[data-trade-tab]').forEach(b => b.onclick = () => trader(b.dataset.tradeTab));
+  document.querySelectorAll<HTMLButtonElement>('[data-sell]').forEach(b => b.onclick = () => { const k = b.dataset.sell as keyof typeof ITEMS; const soldItems = save.stash.filter((i): i is Material => !isGear(i) && i.kind === k); save.coins += soldFor(bagValue(soldItems)); save.stash = save.stash.filter(i => isGear(i) || i.kind !== k); persist(); trader('sell'); audio.coin(); toast(`${ITEMS[k].name}を売却しました`); });
+  document.querySelectorAll<HTMLButtonElement>('[data-sell-gear]').forEach(b => b.onclick = () => { const id = b.dataset.sellGear!; const gearEntry = save.stash.find((i): i is Gear => isGear(i) && i.id === id); if (!gearEntry) return; save.coins += soldFor(entryValue(gearEntry)); save.stash = save.stash.filter(i => !(isGear(i) && i.id === id)); persist(); trader('sell'); audio.coin(); toast(`${gearEntry.name}を売却しました`); });
+  if ($('sell-all')) $('sell-all').onclick = () => { save.coins += soldFor(bagValue(save.stash)); save.stash = []; persist(); trader('sell'); audio.coin(); toast('すべての物資を売却しました'); };
+  document.querySelectorAll<HTMLButtonElement>('[data-buy-gear]').forEach(b => b.onclick = () => {
+    const [base, rarity, ilvl, price] = b.dataset.buyGear!.split('|');
+    const cost = Number(price);
+    if (save.coins < cost) { toast('銀貨が足りません'); return; }
+    const gear = rollGear(base, rarity as any, Number(ilvl), Math.floor(Math.random() * 1e9));
+    save.coins -= cost;
+    save.stash.push(gear);
+    persist();
+    trader('buy');
+    audio.coin();
+    toast(`${gear.name}を購入しました`);
+  });
+  document.querySelectorAll<HTMLButtonElement>('[data-buy-material]').forEach(b => b.onclick = () => {
+    const [kind, amount, price] = b.dataset.buyMaterial!.split('|');
+    const cost = Number(price);
+    if (save.coins < cost) { toast('銀貨が足りません'); return; }
+    save.coins -= cost;
+    save.stash.push({ kind: kind as Material['kind'], amount: Number(amount) });
+    persist();
+    trader('buy');
+    audio.coin();
+    toast(`${ITEMS[kind as keyof typeof ITEMS].name}を購入しました`);
+  });
+}
+
+/** The materials row inside a camp upgrade button: 「薬草×2・布×1」。 */
+function campMats(cost: CampCost): string {
+  const parts = Object.entries(cost.materials).map(([kind, amount]) => `${ITEMS[kind as keyof typeof ITEMS].name}×${amount}`);
+  return parts.length ? ` <small>｜ ${parts.join('・')}</small>` : '';
+}
+function camp() {
+  const balance = `<div class="trade-balance">所持銀貨 <b>${fmt(save.coins)} ${icon('coin')}</b></div>`;
+  const rows = CAMP_UPGRADES.map((upgrade, index) => {
+    const level = campLevel(save.camp, upgrade.id);
+    const maxed = level >= upgrade.maxLevel;
+    const cost = nextCost(save.camp, upgrade.id);
+    return `<div class="camp-row">
+      <span class="camp-icon">${icon(upgrade.icon)}</span>
+      <span class="camp-text"><small>施設 ${String(index + 1).padStart(2, '0')} · LV ${level}/${upgrade.maxLevel} <span>${upgrade.english}</span></small><b>${upgrade.name}</b><em>${upgrade.flavor}</em><i class="camp-what">${upgrade.effectText(level)}</i></span>
+      ${maxed ? '<span class="camp-done">完成</span>' : `<button class="small-button" data-camp-buy="${upgrade.id}" ${cost && canAfford(save.coins, save.stash, cost) ? '' : 'disabled'}>拡張 · ${fmt(cost!.coins)}銀貨${campMats(cost!)}</button>`}
+    </div>`;
+  }).join('');
+  openModal('camp', '焚き火の砦', "TRAVELLER'S CAMP", `<div class="merchant-quote">${icon('fire')}<p>「辺境に帰れば、また明日がある。<br>粗末な野営でも、積み上げれば家になる。」</p></div>${balance}<div class="camp-list">${rows}</div><div class="notice">施設の効果は以降のすべての遠征に永続で適用され、死亡や強盗で失われることはありません。資材・資金は倉庫から支払われます。</div>`);
+  document.querySelectorAll<HTMLButtonElement>('[data-camp-buy]').forEach(b => b.onclick = () => {
+    const id = b.dataset.campBuy!;
+    const cost = nextCost(save.camp, id);
+    if (!cost) return;
+    const coins = payFor(save.coins, save.stash, cost);
+    if (coins === null) { toast('銀貨か資材が足りません'); return; }
+    save.coins = coins;
+    save.camp[id] = campLevel(save.camp, id) + 1;
+    persist();
+    audio.coin();
+    toast('拠点を拡張しました');
+    camp();
+  });
 }
 function settings() {
   openModal('settings', '旅の設定', 'PREFERENCES', `<label class="setting-row"><span><b>旅人の名前</b><small>オンラインの戦場でも表示されます</small></span><input id="name-input" type="text" maxlength="16" value="${esc(save.name)}" /></label><label class="setting-row"><span><b>効果音</b><small>攻撃・被弾・操作の音量</small></span><input id="volume-input" type="range" min="0" max="100" value="${save.volume * 100}" aria-label="効果音の音量" /></label><label class="setting-row"><span><b>環境音</b><small>風・焚き火・獣の声の音量</small></span><input id="ambient-input" type="range" min="0" max="100" value="${save.ambientVolume * 100}" aria-label="環境音の音量" /></label><button class="secondary-button full" id="test-attack-sound" type="button">攻撃音を試す</button><label class="setting-row"><span><b>演出を抑える</b><small>漂う灰のアニメーションを停止</small></span><input id="motion-input" type="checkbox" ${save.reducedMotion ? 'checked' : ''} /></label><div class="notice">ソロではメニューを開くと一時停止します。オンラインの戦場はメニュー表示中も進行します。データはこの端末のブラウザに保存されます。</div><button class="primary-button full" id="save-settings">設定を保存 ${icon('check')}</button>`);
@@ -163,8 +285,22 @@ function backpack() {
     const info = worn ? RARITIES[worn.rarity] : null;
     return `<div class="equipped-row${worn ? ` rarity-${worn.rarity}` : ' empty'}"><span class="equipped-icon">${icon(SLOT_ICONS[slot])}</span><span><small>${SLOT_LABELS[slot]}</small><b${worn ? ` style="color:${info!.color}"` : ''}>${worn ? worn.name : '装備なし'}</b></span>${worn ? `<em>${gearSummary(worn)}</em>` : ''}</div>`;
   }).join('');
-  openModal('bag', '遠征のバックパック', 'FIELD INVENTORY', `<div class="stash-summary"><span>容量 <b>${p.bag.length} / 12</b></span><span>重量 <b>${bagWeight(p.bag).toFixed(1)} / 22.0 kg</b></span></div><h3 class="subheading">現在の装備 <span>EQUIPPED</span></h3><div class="equipped-list">${loadoutHtml}</div><h3 class="subheading">装備品 <span>GEAR</span></h3>${gear.length ? `<div class="item-grid">${gear.map(g => gearCard(g, `<button class="small-button" data-field-equip="${g.id}">装備</button>`)).join('')}</div>` : '<p class="muted">装備品はまだ見つかっていません。</p>'}<h3 class="subheading">物資 <span>MATERIALS</span></h3><div class="item-grid">${materials.map(m => materialCard(m)).join('')}${Array.from({ length: Math.max(0, 12 - p.bag.length) }, () => '<div class="item-card empty">＋</div>').join('')}</div><div class="notice">生還した場合の売却価値：<strong>${fmt(bagValue(p.bag))} 銀貨</strong><br>装備すると外していた装備がバックパックへ戻ります。${mode === 'online' ? 'オンライン遠征は進行中です。' : 'ソロ遠征は一時停止中です。'}</div>`);
+  const bagItemsHtml = p.bag.map((entry, index) => {
+    const selected = selectedBagItems.has(index);
+    const label = isGear(entry) ? (entry as Gear).name : ITEMS[(entry as Material).kind].name;
+    return `<label class="item-card ${selected ? 'selected' : ''}" data-bag-index="${index}"><input type="checkbox" data-bag-select="${index}" ${selected ? 'checked' : ''} /><span>${esc(label)}</span></label>`;
+  }).join('');
+  openModal('bag', '遠征のバックパック', 'FIELD INVENTORY', `<div class="stash-summary"><span>容量 <b>${p.bag.length} / 12</b></span><span>重量 <b>${bagWeight(p.bag).toFixed(1)} / 22.0 kg</b></span></div><h3 class="subheading">現在の装備 <span>EQUIPPED</span></h3><div class="equipped-list">${loadoutHtml}</div><h3 class="subheading">装備品 <span>GEAR</span></h3>${gear.length ? `<div class="item-grid">${gear.map(g => gearCard(g, `<button class="small-button" data-field-equip="${g.id}">装備</button>`)).join('')}</div>` : '<p class="muted">装備品はまだ見つかっていません。</p>'}<h3 class="subheading">物資 <span>MATERIALS</span></h3><div class="item-grid">${materials.map(m => materialCard(m)).join('')}${Array.from({ length: Math.max(0, 12 - p.bag.length) }, () => '<div class="item-card empty">＋</div>').join('')}</div><h3 class="subheading">取捨選択 <span>SELECT</span></h3><div class="item-grid">${bagItemsHtml || '<p class="muted">選択できるアイテムはありません。</p>'}</div><button class="danger-button full" id="discard-selected">選択したアイテムを捨てる</button><div class="notice">生還した場合の売却価値：<strong>${fmt(bagValue(p.bag))} 銀貨</strong><br>装備すると外していた装備がバックパックへ戻ります。${mode === 'online' ? 'オンライン遠征は進行中です。' : 'ソロ遠征は一時停止中です。'}</div>`);
   document.querySelectorAll<HTMLButtonElement>('[data-field-equip]').forEach(b => b.onclick = () => { const g = p.bag.find(i => isGear(i) && i.id === b.dataset.fieldEquip); if (mode === 'online' && g && isGear(g)) { socket?.send(JSON.stringify({ type: 'equip', id: g.id })); toast('装備変更を送信しました'); return; } if (g && isGear(g) && equipInField(p, g)) { audio.equip(); toast(`${g.name}を装備した`); backpack(); } });
+  document.querySelectorAll<HTMLInputElement>('[data-bag-select]').forEach(cb => cb.onchange = () => { const idx = Number(cb.dataset.bagSelect); if (cb.checked) selectedBagItems.add(idx); else selectedBagItems.delete(idx); });
+  if ($('discard-selected')) $('discard-selected').onclick = () => {
+    const indices = [...selectedBagItems].sort((a, b) => b - a);
+    for (const idx of indices) if (idx >= 0 && idx < p.bag.length) p.bag.splice(idx, 1);
+    selectedBagItems.clear();
+    audio.ui('close');
+    toast('選択したアイテムを捨てました');
+    backpack();
+  };
 }
 function pauseMenu() { if (!playing) return; openModal('pause', mode === 'solo' ? '焚き火のひと休み' : '遠征メニュー', 'RAID MENU', `<div class="pause-emblem">${icon('fire')}</div><p class="center muted">${mode === 'solo' ? 'ソロ遠征を一時停止しています。' : 'オンラインの戦場は進行しています。'}</p><div class="button-stack"><button class="primary-button" id="resume">遠征を続ける ${icon('chevron')}</button><button class="secondary-button" id="pause-help">操作ガイド</button><button class="danger-button" id="abandon">遠征を放棄する</button></div><p class="muted center">放棄すると、今回の戦利品は失われます。</p>`); $('resume').onclick = closeModal; $('pause-help').onclick = help; $('abandon').onclick = () => { openModal('abandon', '遠征を放棄しますか？', 'LEAVE THE FRONTIER', `<p class="modal-description">今回の戦利品はすべて失われます。倉庫の物資は失われません。</p><div class="button-stack"><button class="danger-button" id="confirm-abandon">戦利品を失って拠点に戻る</button><button class="secondary-button" id="cancel-abandon">遠征を続ける</button></div>`); $('confirm-abandon').onclick = () => { save.raids++; persist(); returnToBase(); toast('遠征を放棄しました'); }; $('cancel-abandon').onclick = closeModal; }; }
 function setMode(next: 'solo' | 'online') {
@@ -269,11 +405,11 @@ function enterRaid() {
   $('slot-bow').innerHTML = `<kbd>2</kbd>${icon('bow')}<span id="arrows">${p?.arrows ?? 24}</span>`;
   $('world').focus(); audio.setScene('raid'); audio.warHorn(); toast('物資を探して、緑の脱出地点へ。Eを5秒長押しで帰還。');
 }
-function startSolo() { mode = 'solo'; game = makeGame(); playerId = 'local'; addPlayer(game, playerId, save.name, save.meleeChoice, save.loadout); enterRaid(); }
+function startSolo() { mode = 'solo'; game = makeGame(); playerId = 'local'; const p = addPlayer(game, playerId, save.name, save.meleeChoice, save.loadout); applyCampBonuses(p, save.camp); enterRaid(); }
 function connectOnline(room: string) {
   if (connecting) return;
   connecting = true; $('connect-room').textContent = '戦場に接続中…'; $<HTMLButtonElement>('connect-room').disabled = true;
-  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/raid?room=${encodeURIComponent(room)}&name=${encodeURIComponent(save.name)}&weapon=${save.meleeChoice}&loadout=${encodeURIComponent(encodeLoadout(save.loadout))}`);
+  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/raid?room=${encodeURIComponent(room)}&name=${encodeURIComponent(save.name)}&weapon=${save.meleeChoice}&loadout=${encodeURIComponent(encodeLoadout(save.loadout))}&campH=${campLevel(save.camp, 'apothecary')}&campA=${campLevel(save.camp, 'fletcher')}&campS=${campLevel(save.camp, 'shrine')}`);
   socket = ws;
   const timeout = setTimeout(() => { if (connecting) { ws.close(); fail(); } }, 9000);
   let joined = false;
@@ -301,6 +437,13 @@ function finishRaid(p: Player) {
     for (const slot of SLOTS) { const gear = p.loadout[slot]; if (gear) save.loadout[slot] = gear; }
     save.stash.push(...p.bag);
     save.escapes++; save.kills += p.kills; save.collected += p.bag.reduce((s, i) => s + (isGear(i) ? 1 : i.amount), 0);
+    // Daily contract: only raids that made it home count, matching the contracts.
+    const today = todayLocalIso();
+    const task = dailyFor(today);
+    const delta = task.metric === 'kills' ? p.kills : task.metric === 'looted' ? p.bag.reduce((s, i) => s + (isGear(i) ? 1 : i.amount), 0) : 1;
+    const before = save.daily.date === today ? save.daily.progress : 0;
+    save.daily = recordDailyProgress(save.daily, today, delta, task.goal);
+    if (before < task.goal && save.daily.progress >= task.goal && !save.daily.claimed) setTimeout(() => toast('日替わりの依頼を達成しました · 依頼画面で報酬を受け取れます'), 700);
   } else {
     // A failed raid costs the gear that was found inside it, but the issued kit stays.
     save.loadout = { ...raidStartLoadout };
@@ -327,14 +470,14 @@ function updateHUD() {
   if (mode === 'online') $('server-label').textContent = `旅人 ${game.players.filter(p => p.status === 'alive').length}/8`;
   const exit = EXITS.find(e => distance(p, e) < 65), loot = game.loot.find(l => !l.opened && distance(p, l) < 74);
   $('interaction').classList.toggle('hidden', (!exit && !loot) || p.status !== 'alive');
-  if (exit) $('interaction').innerHTML = `<kbd>E</kbd><span>${exit.name}<small>長押しで脱出 · ${Math.max(0, 5 - p.extraction).toFixed(1)}秒</small></span><div class="extraction-bar"><i style="width:${p.extraction / 5 * 100}%"></i></div>`;
+  if (exit) { const need = p.extractTime ?? 5; $('interaction').innerHTML = `<kbd>E</kbd><span>${exit.name}<small>長押しで脱出 · ${Math.max(0, need - p.extraction).toFixed(1)}秒</small></span><div class="extraction-bar"><i style="width:${p.extraction / need * 100}%"></i></div>`; }
   else if (loot) $('interaction').innerHTML = `<kbd>E</kbd><span>${loot.kind === 'herb' ? '薬草を採取する' : loot.kind === 'body' ? '所持品を調べる' : '物資を回収する'}<small>${loot.items.length}点のアイテム</small></span>`;
   $('game-message').textContent = p.messageTime > 0 ? p.message : '';
   if (p.status !== 'alive') finishRaid(p);
 }
 
 // UI actions.
-document.querySelectorAll<HTMLElement>('[data-nav]').forEach(el => el.onclick = () => { const nav = el.dataset.nav; if (connecting) { toast('接続処理が終わるまでお待ちください'); return; } if (playing && ['stash', 'trader', 'quests'].includes(nav!)) { toast('このメニューは拠点で利用できます'); return; } ({ raid: () => currentModal ? closeModal() : playing ? pauseMenu() : void 0, stash, quests, trader, help, settings } as Record<string, () => void>)[nav!]?.(); });
+document.querySelectorAll<HTMLElement>('[data-nav]').forEach(el => el.onclick = () => { const nav = el.dataset.nav; if (connecting) { toast('接続処理が終わるまでお待ちください'); return; } if (playing && ['stash', 'trader', 'quests', 'camp'].includes(nav!)) { toast('このメニューは拠点で利用できます'); return; } ({ raid: () => currentModal ? closeModal() : playing ? pauseMenu() : void 0, stash, quests, trader, camp, help, settings } as Record<string, () => void>)[nav!]?.(); });
 document.querySelector('.brand-mark')!.addEventListener('click', e => { e.preventDefault(); if (playing) pauseMenu(); else closeModal(); });
 renderLoadout();
 $('solo-mode').onclick = () => setMode('solo'); $('online-mode').onclick = () => setMode('online'); $('weapon-select').onclick = () => characterSheet('melee'); $('gear-sheet').onclick = () => characterSheet(); $('deploy').onclick = deploy; $('all-quests').onclick = () => playing ? toast('依頼は拠点で確認できます') : quests(); $('contract-grid').onclick = () => playing ? toast('依頼は拠点で確認できます') : quests(); $('controls-link').onclick = help; $('map-button').onclick = toggleMap; $('pause-button').onclick = pauseMenu;
@@ -425,6 +568,7 @@ const enemyAudioState = new Map<string, { hp: number; swing: number }>();
 const alertedEnemies = new Set<string>();
 let lastEs = 0, lastHeals = 3, lastDodge = 0, stepAt = 0, extractTickAt = 0;
 let lastAttack: AttackSnapshot = { attackSerial: 0, cooldown: 0, swing: 0 };
+const selectedBagItems = new Set<number>();
 /** Turns state changes since the previous frame into positioned sounds: swings, hits, deaths, steps. */
 function syncCombatAudio(p: Player, dt: number) {
   audio.setListener(p.x, p.y);
