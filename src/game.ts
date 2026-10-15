@@ -71,6 +71,8 @@ export interface Input { x: number; y: number; angle: number; attack: boolean; s
 export const idleInput = (): Input => ({ x: 0, y: 0, angle: -Math.PI / 2, attack: false, sprint: false, interact: false, heal: false, dodge: false, weapon: 'melee' });
 export interface Actor { id: string; x: number; y: number; angle: number; hp: number; maxHp: number; cooldown: number; swing: number; hurt: number }
 export interface Player extends Actor {
+  /** Monotonic accepted-attack counter for presentation, including skipped animation frames. */
+  attackSerial?: number;
   name: string;
   stamina: number;
   arrows: number;
@@ -194,7 +196,7 @@ export function addPlayer(state: GameState, id: string, name = '名もなき旅�
   const spawn = spawns[state.players.length % spawns.length];
   const player: Player = {
     id, name, ...spawn, angle: -Math.PI / 2, hp: BASE_LIFE, maxHp: BASE_LIFE, cooldown: 0, swing: 0, hurt: 0,
-    stamina: BASE_STAMINA, arrows: 24, heals: 3, weapon: 'melee', meleeChoice, loadout: { ...loadout },
+    attackSerial: 0, stamina: BASE_STAMINA, arrows: 24, heals: 3, weapon: 'melee', meleeChoice, loadout: { ...loadout },
     globals: globalStats(loadout), es: 0, esDelay: 0, leech: 0, bag: [], status: 'alive', extraction: 0, kills: 0,
     dodge: 0, dodgeCooldown: 0, healCooldown: 0, input: idleInput(), message: '', messageTime: 0,
   };
@@ -390,6 +392,7 @@ export function stepGame(state: GameState, delta: number) {
       const gear = usingBow ? bowGear(p) : meleeGear(p);
       const profile = weaponProfile(gear, p.globals);
       if (p.stamina >= profile.stamina && (usingBow ? p.arrows > 0 : true)) {
+        p.attackSerial = (p.attackSerial ?? 0) + 1;
         p.cooldown = 1 / profile.attackSpeed; p.swing = .22; p.stamina -= profile.stamina;
         const { packet, profile: used } = rollWeaponDamage(state, gear, p.globals);
         const pierce = (used.traits ?? []).includes('pierce');

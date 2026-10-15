@@ -1,3 +1,4 @@
+import { weaponArt } from './weaponArt';
 /**
  * Rendering helpers for the PoE style equipment screens: the paper doll of
  * the character sheet, the compact slot grid of the lobby and the statistic
@@ -17,6 +18,11 @@ export const SLOT_ICONS: Record<Slot, string> = {
   melee: 'sword', bow: 'bow', offhand: 'shield', helmet: 'helmet', chest: 'chest',
   gloves: 'gloves', boots: 'boots', amulet: 'amulet', ring: 'ring',
 };
+
+function gearArt(gear: Gear | undefined, slot: Slot) {
+  const base = gear ? baseOf(gear) : null;
+  return base && 'kind' in base ? weaponArt(base.kind, base.icon) : icon(SLOT_ICONS[slot]);
+}
 
 /** The order the paper doll uses: weapons on the left, body in the middle. */
 export const SLOT_ORDER: readonly Slot[] = ['melee', 'bow', 'offhand', 'helmet', 'chest', 'gloves', 'boots', 'amulet', 'ring'];
@@ -51,7 +57,7 @@ export function characterSheetHtml(loadout: Partial<Record<Slot, Gear>>, globals
     const gear = loadout[slot];
     const info = gear ? RARITIES[gear.rarity] : null;
     return `<div class="doll-slot${gear ? ` filled rarity-${gear.rarity}` : ' empty'}" data-slot="${slot}">
-      <span class="doll-icon">${icon(SLOT_ICONS[slot])}</span>
+      <span class="doll-icon">${gearArt(gear, slot)}</span>
       <span class="doll-text">
         <small>${SLOT_LABELS[slot]}</small>
         <b${gear ? ` style="color:${info!.color}"` : ''}>${gear ? esc(gear.name) : '装備なし'}</b>
@@ -90,7 +96,7 @@ export function slotGrid(loadout: Partial<Record<Slot, Gear>>, fallback: Partial
     const gear = loadout[slot] ?? fallback[slot];
     const info = gear ? RARITIES[gear.rarity] : null;
     return `<button class="equipment-item${gear ? ` filled rarity-${gear.rarity}` : ' empty'}" data-slot="${slot}" title="${gear ? esc(gear.name) : `${SLOT_LABELS[slot]}：装備なし`}">
-      <span class="equipment-icon">${icon(SLOT_ICONS[slot])}</span>
+      <span class="equipment-icon">${gearArt(gear, slot)}</span>
       <span class="equipment-text"><b${gear ? ` style="color:${info!.color}"` : ''}>${gear ? esc(gear.name) : SLOT_LABELS[slot]}</b><small>${gear ? esc(gearSummary(gear)) : '装備なし'}</small></span>
     </button>`;
   }).join('');
