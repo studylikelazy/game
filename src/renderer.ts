@@ -1,4 +1,5 @@
 import { BUILDINGS, EXITS, ITEMS, WORLD, seeded, type Actor, type GameState, type Item, type Player } from './game';
+import { RARITIES, baseOf, isGear, type Gear, type Rarity } from './items';
 
 const TAU = Math.PI * 2;
 /** Braziers that anchor the warm pools of light in the ruined village. */
@@ -20,9 +21,13 @@ const AMBIENT_BASE = '#98a0ac';
 
 /** Item rarity drives the loot beam, ground glow and label colour, exactly like an action RPG drop filter. */
 const RARITY: Record<string, { color: string; beam: number; glow: number }> = {
+  normal: { color: '#cfd2c2', beam: 0, glow: .18 },
+  magic: { color: '#6d8cf0', beam: 46, glow: .3 },
+  rare: { color: '#f0dc63', beam: 74, glow: .42 },
+  unique: { color: '#ff9a3c', beam: 112, glow: .6 },
+  // Legacy names kept so older data still renders.
   common: { color: '#cfd2c2', beam: 0, glow: .18 },
   uncommon: { color: '#6d8cf0', beam: 46, glow: .3 },
-  rare: { color: '#f0dc63', beam: 74, glow: .42 },
   epic: { color: '#bb74ef', beam: 104, glow: .55 },
 };
 
@@ -99,7 +104,7 @@ export class Renderer {
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
-    this.lastState = { time: 0, duration: 0, players: [], enemies: [], loot: [], arrows: [], pvp: false, ended: false, sequence: 0 };
+    this.lastState = { time: 0, duration: 0, players: [], enemies: [], loot: [], arrows: [], pvp: false, ended: false, sequence: 0, rng: 0x9E3779B9 };
     this.ctx = canvas.getContext('2d')!;
     this.terrain = document.createElement('canvas');
     this.terrain.width = WORLD.width;
@@ -1367,7 +1372,8 @@ export class Renderer {
     for (let i = 0; i < FIRES.length; i++) this.drawBrazier(c, FIRES[i][0], FIRES[i][1], i, time);
     for (const actor of this.actorsInDrawOrder(state, playerId, lobby)) {
       const isPlayer = 'status' in actor;
-      this.actor(c, actor, isPlayer, actor.id === playerId, isPlayer ? '' : (actor as { kind?: string }).kind);
+      const held = isPlayer ? this.heldWeapon(actor as Player) : 'sword';
+      this.actor(c, actor, isPlayer, actor.id === playerId, isPlayer ? '' : (actor as { kind?: string }).kind, held);
     }
     for (const enemy of state.enemies) if (enemy.hp > 0 && enemy.swing > 0 && !lobby && this.inView(enemy.x, enemy.y, 120)) this.drawSlash(c, enemy, false);
     for (const player of state.players) {
@@ -1503,14 +1509,14 @@ export class Renderer {
 
   /** Rarity is the best item in the container, matching how action RPG drop filters read loot. */
   private lootRarity(items: Item[]) {
-    let best = 0;
-    let key = 'common';
+    let best = -1;
+    let key: Rarity = 'normal';
     for (const item of items) {
-      const rarity = ITEMS[item.kind].rarity;
-      const rank = rarity === 'epic' ? 3 : rarity === 'rare' ? 2 : rarity === 'uncommon' ? 1 : 0;
+      const rarity: Rarity = isGear(item) ? item.rarity : ITEMS[item.kind].rarity;
+      const rank = (['normal', 'magic', 'rare', 'unique'] as Rarity[]).indexOf(rarity);
       if (rank > best) { best = rank; key = rarity; }
     }
-    return RARITY[key] ?? RARITY.common;
+    return { ...(RARITY[key] ?? RARITY.normal), key };
   }
 
   private drawLoot(c: CanvasRenderingContext2D, loot: GameState['loot'][number], state: GameState, lobby: boolean, time: number) {
@@ -1587,6 +1593,57 @@ export class Renderer {
         c.fillStyle = '#2b1c11aa';
         c.fillRect(-14 + i * 6, -11, 1.4, 22);
       }
+    }
+
+    // A gear inside the container is previewed as a floating silhouette so the
+    // drop reads as an item drop and not just a box.
+    const preview = loot.items.find(item => isGear(item));
+    if (preview) {
+      const gear = preview as Gear;
+      const base = baseOf(gear);
+      const tint = RARITY[gear.rarity]?.color ?? '#cfd2c2';
+      c.save();
+      c.translate(0, -34 - pulse * 2);
+      c.globalAlpha = .9;
+      c.fillStyle = '#0a0d12cc';
+      c.beginPath();
+      c.arc(0, 0, 10, 0, TAU);
+      c.fill();
+      c.strokeStyle = tint;
+      c.lineWidth = 1.4;
+      c.beginPath();
+      c.arc(0, 0, 10, 0, TAU);
+      c.stroke();
+      c.fillStyle = tint;
+      const kind = base && 'kind' in base ? base.kind : 'sword';
+      c.beginPath();
+      if (kind === 'bow' || kind === 'crossbow') {
+        c.arc(-2, 0, 6, -Math.PI / 2, Math.PI / 2);
+        c.lineWidth = 1.6;
+        c.strokeStyle = tint;
+        c.stroke();
+      } else if (kind === 'axe' || kind === 'mace') {
+        c.rect(-1.2, -6, 2.4, 12);
+        c.rect(-1, -7, 7, 4);
+      } else if (kind === 'dagger') {
+        c.moveTo(0, -7);
+        c.lineTo(2.4, 1);
+        c.lineTo(-2.4, 1);
+      } else if (kind === 'greatsword') {
+        c.moveTo(-1.8, -8);
+        c.lineTo(1.8, -8);
+        c.lineTo(1.2, 5);
+        c.lineTo(-1.2, 5);
+      } else {
+        c.moveTo(0, -8);
+        c.lineTo(2.6, -3);
+        c.lineTo(1.8, 5);
+        c.lineTo(-1.8, 5);
+        c.lineTo(-2.6, -3);
+      }
+      c.closePath();
+      c.fill();
+      c.restore();
     }
 
     // Ground glow and vertical beam keyed to rarity.
@@ -1872,7 +1929,7 @@ export class Renderer {
     for (const loot of state.loot) {
       if (loot.opened) continue;
       const rarity = this.lootRarity(loot.items);
-      const rgb = rarity === RARITY.epic ? [187, 116, 239] : rarity === RARITY.rare ? [240, 220, 99] : rarity === RARITY.uncommon ? [109, 140, 240] : [190, 205, 210];
+      const rgb = rarity.key === 'unique' ? [255, 154, 60] : rarity.key === 'rare' ? [240, 220, 99] : rarity.key === 'magic' ? [109, 140, 240] : [190, 205, 210];
       this.pushLight(lights, loot.x, loot.y, 46 + rarity.beam * .52, rgb[0], rgb[1], rgb[2], .14 + rarity.glow * .26);
     }
     for (const arrow of state.arrows) this.pushLight(lights, arrow.x, arrow.y, 48, 255, 190, 110, .34);
@@ -2061,7 +2118,17 @@ export class Renderer {
     c.fill();
   }
 
-  private actor(c: CanvasRenderingContext2D, actor: Actor, player: boolean, self: boolean, kind = '') {
+  /** The weapon kind a player is holding, taken from the gear in the active slot. */
+  private heldWeapon(player: Player): string {
+    const melee = player.loadout?.melee;
+    const bow = player.loadout?.bow;
+    const gear = player.weapon === 'bow' ? bow : melee;
+    if (!gear) return player.weapon === 'bow' ? 'bow' : 'sword';
+    const base = baseOf(gear);
+    return base && 'kind' in base ? base.kind : 'sword';
+  }
+
+  private actor(c: CanvasRenderingContext2D, actor: Actor, player: boolean, self: boolean, kind = '', held = 'sword') {
     c.save();
     c.translate(actor.x, actor.y);
     c.scale(ACTOR_SCALE, ACTOR_SCALE);
@@ -2097,7 +2164,7 @@ export class Renderer {
     c.save();
     c.rotate(actor.angle + Math.PI / 2);
     if (kind === 'wolf') this.wolf(c, actor);
-    else this.humanoid(c, actor, player, self, kind);
+    else this.humanoid(c, actor, player, self, kind, held);
     c.restore();
     if (!self) {
       // Hostile plates and health bars read like an action RPG enemy frame, drawn unscaled and crisp.
@@ -2209,7 +2276,190 @@ export class Renderer {
     c.stroke();
   }
 
-  private humanoid(c: CanvasRenderingContext2D, actor: Actor, player: boolean, self: boolean, kind: string) {
+  /**
+   * Draws the weapon in the traveller's hand. The shape follows the base type
+   * so an axe reads as an axe and a crossbow reads as a crossbow.
+   */
+  private weapon(c: CanvasRenderingContext2D, kind: string) {
+    const steel = '#8f978f', edge = '#e8f0ee', wood = '#7c6a49', dark = '#3d2b1d';
+    switch (kind) {
+      case 'katana': {
+        // Slightly curved single edge with a round guard.
+        c.strokeStyle = steel;
+        c.lineWidth = 3.4;
+        c.beginPath();
+        c.moveTo(-1, 2);
+        c.quadraticCurveTo(3, -18, 1, -36);
+        c.stroke();
+        c.strokeStyle = edge;
+        c.lineWidth = 1.1;
+        c.beginPath();
+        c.moveTo(-.2, 1);
+        c.quadraticCurveTo(3.6, -18, 1.6, -35);
+        c.stroke();
+        c.fillStyle = '#8d7a52';
+        c.beginPath();
+        c.ellipse(0, 3, 4.6, 1.8, 0, 0, TAU);
+        c.fill();
+        c.fillStyle = '#2b2f38';
+        c.fillRect(-1.6, 4, 3.2, 9);
+        break;
+      }
+      case 'axe': {
+        // Heavy head on a long haft.
+        c.fillStyle = wood;
+        c.fillRect(-1.8, -30, 3.6, 38);
+        c.fillStyle = steel;
+        c.beginPath();
+        c.moveTo(1, -32);
+        c.quadraticCurveTo(17, -28, 14, -12);
+        c.quadraticCurveTo(8, -17, 1, -16);
+        c.closePath();
+        c.fill();
+        c.fillStyle = edge;
+        c.beginPath();
+        c.moveTo(14, -28);
+        c.quadraticCurveTo(18, -21, 14, -12);
+        c.quadraticCurveTo(12, -20, 12, -27);
+        c.closePath();
+        c.fill();
+        break;
+      }
+      case 'mace': {
+        // Flanged head on a short haft.
+        c.fillStyle = wood;
+        c.fillRect(-1.7, -14, 3.4, 24);
+        c.fillStyle = steel;
+        c.beginPath();
+        c.roundRect(-8, -26, 16, 13, 2);
+        c.fill();
+        c.fillStyle = edge;
+        c.fillRect(-8, -26, 3, 13);
+        c.strokeStyle = '#b9c1bd';
+        c.lineWidth = 1.6;
+        c.beginPath();
+        c.moveTo(-8, -22);
+        c.lineTo(-13, -19);
+        c.moveTo(8, -22);
+        c.lineTo(13, -19);
+        c.stroke();
+        break;
+      }
+      case 'dagger': {
+        c.fillStyle = steel;
+        c.beginPath();
+        c.moveTo(-1.8, 1);
+        c.lineTo(-2.4, -14);
+        c.lineTo(0, -20);
+        c.lineTo(2.4, -14);
+        c.lineTo(1.8, 1);
+        c.fill();
+        c.fillStyle = edge;
+        c.beginPath();
+        c.moveTo(-.4, 0);
+        c.lineTo(-1.2, -14);
+        c.lineTo(0, -19);
+        c.lineTo(.6, -14);
+        c.lineTo(.4, 0);
+        c.fill();
+        c.fillStyle = wood;
+        c.fillRect(-4, 1, 8, 2.4);
+        c.fillStyle = dark;
+        c.fillRect(-1.4, 3.4, 2.8, 7);
+        break;
+      }
+      case 'greatsword': {
+        // Long two handed blade, held low.
+        c.fillStyle = steel;
+        c.beginPath();
+        c.moveTo(-3.4, 2);
+        c.lineTo(-4.4, -30);
+        c.lineTo(0, -42);
+        c.lineTo(4.4, -30);
+        c.lineTo(3.4, 2);
+        c.fill();
+        c.fillStyle = edge;
+        c.beginPath();
+        c.moveTo(-.8, 1);
+        c.lineTo(-2.6, -30);
+        c.lineTo(0, -40);
+        c.lineTo(1.4, -30);
+        c.lineTo(.8, 1);
+        c.fill();
+        c.fillStyle = '#9a8149';
+        c.fillRect(-10, 1, 20, 3.4);
+        c.fillStyle = dark;
+        c.fillRect(-2.4, 4, 4.8, 12);
+        break;
+      }
+      case 'crossbow': {
+        c.fillStyle = wood;
+        c.fillRect(-2, -6, 4, 22);
+        c.strokeStyle = '#8a6c43';
+        c.lineWidth = 3.4;
+        c.beginPath();
+        c.moveTo(-13, -20);
+        c.quadraticCurveTo(0, -14, 13, -20);
+        c.stroke();
+        c.strokeStyle = '#cbbb92';
+        c.lineWidth = 1;
+        c.beginPath();
+        c.moveTo(-13, -20);
+        c.lineTo(13, -20);
+        c.stroke();
+        c.fillStyle = steel;
+        c.fillRect(-1.6, -8, 3.2, 12);
+        break;
+      }
+      case 'bow': {
+        c.strokeStyle = '#8a6c43';
+        c.lineWidth = 3.2;
+        c.beginPath();
+        c.arc(0, -3, 20, -Math.PI / 2, Math.PI / 2);
+        c.stroke();
+        c.strokeStyle = '#cbbb92';
+        c.lineWidth = 1;
+        c.beginPath();
+        c.moveTo(0, -23);
+        c.lineTo(0, 17);
+        c.stroke();
+        c.fillStyle = '#d8cba5';
+        c.beginPath();
+        c.moveTo(0, 0);
+        c.lineTo(18, -3);
+        c.lineTo(18, -1);
+        c.closePath();
+        c.fill();
+        break;
+      }
+      default: {
+        // Blade with a bright edge that reads as a highlight.
+        c.fillStyle = steel;
+        c.beginPath();
+        c.moveTo(-2.6, 1);
+        c.lineTo(-3.6, -27);
+        c.lineTo(0, -35);
+        c.lineTo(3.6, -27);
+        c.lineTo(2.6, 1);
+        c.fill();
+        c.fillStyle = edge;
+        c.beginPath();
+        c.moveTo(-.6, -1);
+        c.lineTo(-2.2, -27);
+        c.lineTo(0, -34);
+        c.lineTo(1, -27);
+        c.lineTo(.6, -1);
+        c.fill();
+        c.fillStyle = wood;
+        c.fillRect(-7, 0, 14, 3);
+        c.fillStyle = dark;
+        c.fillRect(-2, 3, 4, 9);
+        break;
+      }
+    }
+  }
+
+  private humanoid(c: CanvasRenderingContext2D, actor: Actor, player: boolean, self: boolean, kind: string, held = 'sword') {
     const knight = kind === 'knight';
     const hurt = actor.hurt > 0;
     const cloth = hurt ? '#d69a80' : self ? '#5f6a49' : player ? '#5c3a37' : knight ? '#414a53' : '#523927';
@@ -2378,48 +2628,7 @@ export class Renderer {
     c.save();
     c.translate(16, -2);
     c.rotate(actor.swing > 0 ? -1 + actor.swing * 9 : .2);
-    if (player && (actor as Player).weapon === 'bow') {
-      c.strokeStyle = '#8a6c43';
-      c.lineWidth = 3.2;
-      c.beginPath();
-      c.arc(0, -3, 20, -Math.PI / 2, Math.PI / 2);
-      c.stroke();
-      c.strokeStyle = '#cbbb92';
-      c.lineWidth = 1;
-      c.beginPath();
-      c.moveTo(0, -23);
-      c.lineTo(0, 17);
-      c.stroke();
-      c.fillStyle = '#d8cba5';
-      c.beginPath();
-      c.moveTo(0, 0);
-      c.lineTo(18, -3);
-      c.lineTo(18, -1);
-      c.closePath();
-      c.fill();
-    } else {
-      // Blade with a bright edge that reads as a highlight.
-      c.fillStyle = '#8f978f';
-      c.beginPath();
-      c.moveTo(-2.6, 1);
-      c.lineTo(-3.6, -27);
-      c.lineTo(0, -35);
-      c.lineTo(3.6, -27);
-      c.lineTo(2.6, 1);
-      c.fill();
-      c.fillStyle = '#e8f0ee';
-      c.beginPath();
-      c.moveTo(-.6, -1);
-      c.lineTo(-2.2, -27);
-      c.lineTo(0, -34);
-      c.lineTo(1, -27);
-      c.lineTo(.6, -1);
-      c.fill();
-      c.fillStyle = '#7c6a49';
-      c.fillRect(-7, 0, 14, 3);
-      c.fillStyle = '#3d2b1d';
-      c.fillRect(-2, 3, 4, 9);
-    }
+    this.weapon(c, held);
     c.restore();
 
     // Cold rim light along the shoulder line.

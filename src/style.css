@@ -303,3 +303,159 @@ kbd{background:#0b0e15;border:1px solid #2e3644;color:#cfd4de}
 .item-card.uncommon b,.trade-icon.uncommon{color:var(--rarity-uncommon)}
 .item-card.rare b,.trade-icon.rare{color:var(--rarity-rare)}
 .item-card.epic b,.trade-icon.epic{color:var(--rarity-epic)}
+
+/* ==========================================================================
+   PoE item model: rarity colours, gear cards, tooltips and the paper doll.
+   The legacy common/uncommon/epic classes above stay in place so old markup
+   keeps working, while the new normal/magic/rare/unique set drives the gear.
+   ========================================================================== */
+:root{
+  --rarity-normal:#d9dcd0;
+  --rarity-magic:#6d8cf0;
+  --rarity-unique:#ff9a3c;
+  --panel-line:#2a3340;
+  --panel-soft:#151b26;
+}
+.rarity-normal{color:var(--rarity-normal);border-color:#d9dcd055}
+.rarity-magic{color:var(--rarity-magic);border-color:#6d8cf066}
+.rarity-rare{color:var(--rarity-rare);border-color:#f0dc6366}
+.rarity-unique{color:var(--rarity-unique);border-color:#ff9a3c73}
+.item-card.rarity-normal{border-color:#4b535f;box-shadow:inset 0 0 22px #d9dcd00d}
+.item-card.rarity-normal .item-icon{color:var(--rarity-normal)}
+.item-card.rarity-magic{border-color:#3f4c78;box-shadow:inset 0 0 22px #6d8cf014}
+.item-card.rarity-magic .item-icon{color:var(--rarity-magic)}
+.item-card.rarity-rare{border-color:#6b6432;box-shadow:inset 0 0 22px #f0dc6314}
+.item-card.rarity-rare .item-icon{color:var(--rarity-rare)}
+.item-card.rarity-unique{border-color:#7a4d1d;box-shadow:inset 0 0 26px #ff9a3c1f}
+.item-card.rarity-unique .item-icon{color:var(--rarity-unique)}
+.item-card b,.item-card .item-icon{transition:color .18s ease}
+.item-card .item-icon{width:30px;height:30px;stroke-width:1.1;margin-bottom:9px;color:#b9c0cd}
+.item-card .affix-line{font-size:7.5px;line-height:1.35;margin-top:3px;text-align:center}
+.item-card .affix-line.global{color:#9aa6bb}
+.item-card .affix-line.local{color:#7fb2f0}
+.item-card .small-button{margin-top:8px}
+.result-loot .rarity-normal{color:var(--rarity-normal)}
+.result-loot .rarity-magic{color:var(--rarity-magic)}
+.result-loot .rarity-rare{color:var(--rarity-rare)}
+.result-loot .rarity-unique{color:var(--rarity-unique)}
+.trade-icon.rarity-normal{color:var(--rarity-normal)}
+.trade-icon.rarity-magic{color:var(--rarity-magic)}
+.trade-icon.rarity-rare{color:var(--rarity-rare)}
+.trade-icon.rarity-unique{color:var(--rarity-unique)}
+
+/* PoE style tooltip. */
+.tooltip{
+  background:linear-gradient(180deg,#0d1119f2,#080a10f7);
+  border:1px solid var(--panel-line);
+  border-left-width:3px;
+  border-radius:3px;
+  padding:11px 13px;
+  min-width:230px;
+  max-width:320px;
+  font-size:11px;
+  line-height:1.55;
+  color:#cfd6e2;
+  box-shadow:0 14px 40px #000000b0,inset 0 0 30px #ffffff05;
+}
+.tooltip.rarity-normal{border-left-color:var(--rarity-normal)}
+.tooltip.rarity-magic{border-left-color:var(--rarity-magic)}
+.tooltip.rarity-rare{border-left-color:var(--rarity-rare)}
+.tooltip.rarity-unique{border-left-color:var(--rarity-unique)}
+.tooltip .tooltip-name{font-family:"Noto Serif JP",Georgia,serif;font-size:14px;font-weight:400;letter-spacing:.01em}
+.tooltip .tooltip-type{font-size:10px;color:#8d97a8;margin-top:2px}
+.tooltip .tooltip-meta{font-size:9.5px;color:#79839a;margin-top:3px}
+.tooltip .tooltip-base{margin-top:8px;border-top:1px solid #232b38;padding-top:6px}
+.tooltip .tooltip-base div,.tooltip .tooltip-implicit,.tooltip .tooltip-affixes div,.tooltip .tooltip-traits div{display:flex;gap:8px;align-items:baseline}
+.tooltip .tooltip-base span{flex:1;color:#9aa4b6}
+.tooltip .tooltip-base b,.tooltip .tooltip-implicit b,.tooltip .tooltip-affixes b{font-weight:400;color:#e4e9f2;text-align:right}
+.tooltip .tooltip-base b.local{color:#7fb2f0}
+.tooltip .tooltip-implicit{margin-top:6px;color:#9aa4b6}
+.tooltip .tooltip-implicit span{flex:1;font-size:9.5px}
+.tooltip .tooltip-affixes{margin-top:7px;border-top:1px solid #232b38;padding-top:6px;display:flex;flex-direction:column;gap:3px}
+.tooltip .tooltip-affixes .tier-mark{flex:0 0 22px;font-size:9px;color:#8a94a8;border:1px solid #2e3746;border-radius:2px;text-align:center}
+.tooltip .tooltip-affixes b.global{color:#c8cfdc}
+.tooltip .tooltip-affixes b.local{color:#7fb2f0}
+.tooltip .tooltip-traits{margin-top:7px;border-top:1px solid #232b38;padding-top:6px}
+.tooltip .tooltip-traits b{font-weight:400;color:#ffb066}
+.tooltip .tooltip-value{margin-top:8px;font-size:9.5px;color:#c8a86a}
+
+/* Paper doll of the character sheet. */
+.sheet{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px;align-items:start}
+.sheet-doll{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.doll-slot{
+  display:flex;align-items:center;gap:9px;padding:8px 9px;border:1px solid #222a36;border-radius:3px;
+  background:#0f141d;position:relative;cursor:pointer;text-align:left;transition:border-color .16s ease,background .16s ease;
+}
+.doll-slot.empty{background:#0b0f16;border-style:dashed;cursor:default}
+.doll-slot.filled:hover{border-color:#3d4a5e;background:#131a25}
+.doll-slot .doll-icon{flex:0 0 22px;width:22px;height:22px;stroke-width:1.1;color:#7f8a9c}
+.doll-slot.filled .doll-icon{color:var(--rarity-normal)}
+.doll-slot.rarity-magic .doll-icon{color:var(--rarity-magic)}
+.doll-slot.rarity-rare .doll-icon{color:var(--rarity-rare)}
+.doll-slot.rarity-unique .doll-icon{color:var(--rarity-unique)}
+.doll-slot .doll-text{display:flex;flex-direction:column;min-width:0;flex:1}
+.doll-slot .doll-text small{font-size:8.5px;color:#6f7a8c;letter-spacing:.08em}
+.doll-slot .doll-text b{font-size:10px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.doll-slot.empty .doll-text b{color:#5a6376}
+.doll-slot .doll-text em{font-style:normal;font-size:8.5px;color:#7b8698;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.doll-slot .doll-tier{position:absolute;top:5px;right:7px;font-size:7.5px;letter-spacing:.06em;color:#6e7a8d}
+.doll-slot .small-button.unequip{position:absolute;right:6px;bottom:5px;font-size:8px;padding:2px 6px}
+.sheet-stats{border:1px solid #1e2531;border-radius:3px;background:#0c1017;padding:12px 14px}
+.sheet-stats h3{font-size:12px;font-weight:400;letter-spacing:.06em;margin-bottom:9px;display:flex;justify-content:space-between;align-items:baseline;color:#d5dce8}
+.sheet-stats h3 span{font-size:8px;color:#5f6a7c;letter-spacing:.18em}
+.stat-line{display:flex;align-items:baseline;gap:8px;padding:3.5px 0;border-bottom:1px dashed #1b222d;font-size:10.5px}
+.stat-line:last-child{border-bottom:0}
+.stat-line span{flex:1;color:#8d97a8}
+.stat-line b{font-weight:400;color:#e2e8f1}
+.stat-line small{font-size:8px;color:#5f6a7c;min-width:0}
+
+/* Equipment grid in the lobby panel. */
+.equipment-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.equipment-item{
+  display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid #222a36;border-radius:3px;
+  background:#0d1219;text-align:left;cursor:pointer;transition:border-color .16s ease,background .16s ease;min-width:0;
+}
+.equipment-item:hover{border-color:#3d4a5e;background:#131a25}
+.equipment-item.empty{opacity:.55;border-style:dashed}
+.equipment-item .equipment-icon{flex:0 0 18px;width:18px;height:18px;stroke-width:1.2;color:#7f8a9c}
+.equipment-item.rarity-magic .equipment-icon{color:var(--rarity-magic)}
+.equipment-item.rarity-rare .equipment-icon{color:var(--rarity-rare)}
+.equipment-item.rarity-unique .equipment-icon{color:var(--rarity-unique)}
+.equipment-item .equipment-text{display:flex;flex-direction:column;min-width:0}
+.equipment-item .equipment-text b{font-size:9px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#c9d1de}
+.equipment-item .equipment-text small{font-size:7.5px;color:#6f7a8c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gear-sheet-button{
+  display:flex;align-items:center;gap:8px;width:100%;margin-top:9px;padding:9px 11px;cursor:pointer;
+  border:1px solid #2a3340;border-radius:3px;background:#111823;color:#c3ccda;font-size:10.5px;
+  letter-spacing:.04em;transition:border-color .16s ease,background .16s ease;
+}
+.gear-sheet-button:hover{border-color:#41506a;background:#151d29}
+.gear-sheet-button svg{width:15px;height:15px;stroke-width:1.2;flex:0 0 15px}
+.gear-sheet-button small{margin-left:auto;font-size:7.5px;letter-spacing:.16em;color:#5f6a7c}
+
+/* Equipped list inside the field inventory. */
+.equipped-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px;margin-bottom:6px}
+.equipped-row{display:flex;align-items:center;gap:9px;padding:6px 9px;border:1px solid #222a36;border-radius:3px;background:#0d1219;min-width:0}
+.equipped-row .equipped-icon{flex:0 0 17px;width:17px;height:17px;stroke-width:1.2;color:#7f8a9c}
+.equipped-row.rarity-magic .equipped-icon{color:var(--rarity-magic)}
+.equipped-row.rarity-rare .equipped-icon{color:var(--rarity-rare)}
+.equipped-row.rarity-unique .equipped-icon{color:var(--rarity-unique)}
+.equipped-row>span:nth-child(2){display:flex;flex-direction:column;min-width:0;flex:1}
+.equipped-row small{font-size:8px;color:#6f7a8c;letter-spacing:.06em}
+.equipped-row b{font-size:10px;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.equipped-row.empty b{color:#5a6376}
+.equipped-row em{font-style:normal;font-size:8px;color:#727d8f;white-space:nowrap}
+
+/* Energy shield bar in the raid HUD. */
+.vital-line.shield span{color:#7fb2f0}
+.vital-line.shield .bar>i{background:linear-gradient(90deg,#3d6fb5,#7fb2f0)}
+.vital-line.shield .bar>i{transition:width .12s linear}
+.subheading{display:flex;align-items:baseline;gap:8px;font-size:10px;letter-spacing:.12em;color:#9aa4b6;margin:14px 0 7px;font-weight:400}
+.subheading span{font-size:7.5px;letter-spacing:.18em;color:#5f6a7c}
+@media (max-width:720px){
+  .sheet{grid-template-columns:1fr}
+  .sheet-doll{grid-template-columns:1fr}
+  .equipment-grid{grid-template-columns:1fr}
+}
+.gear-details{width:100%;margin-top:8px;font-size:10px;text-align:left}.gear-details summary{cursor:pointer;color:#9aa4b6;text-align:center}.gear-details .tooltip{min-width:0;max-width:100%;padding:8px;margin-top:5px;overflow-wrap:anywhere}.gear-details .tooltip-name{font-size:11px}.gear-details .tooltip-affixes div{flex-wrap:wrap}
+@media(max-width:780px){.gear-sheet-button{grid-column:1 / -1}.equipment-grid .equipment-item:nth-child(n){display:flex}.equipment-grid{grid-row:auto;grid-column:1 / -1;grid-template-columns:repeat(3,minmax(0,1fr))}.equipment-item .equipment-text b{white-space:normal}.item-grid:has(.gear-details){grid-template-columns:repeat(2,minmax(0,1fr))}}

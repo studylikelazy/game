@@ -9,11 +9,11 @@
 **GitHub Pagesの公開先（デプロイ成功後に有効）:** https://studylikelazy.github.io/game/
 
 - GitHub Pages版は **ソロPvE専用** です。静的ホスティングのため、オンライン対戦サーバーは動きません。
-- `arena/24efa9d6-game` または `main` にpushすると、[Test and publish game](https://github.com/studylikelazy/game/actions/workflows/pages.yml) がテスト・ビルド・公開を行います。
+- `arena/67346cc6-game` または `main` にpushすると、[Test and publish game](https://github.com/studylikelazy/game/actions/workflows/pages.yml) がテスト・ビルド・公開を行います。
 - ワークフローではPagesの自動有効化を試みます。権限不足で公開に失敗した場合は、リポジトリ所有者が以下を設定してください。
   1. [Settings → Pages](https://github.com/studylikelazy/game/settings/pages) を開く。
   2. **Build and deployment → Source → GitHub Actions** を選択する。
-  3. `Settings → Environments → github-pages` に公開ブランチ制限がある場合、`arena/24efa9d6-game` を許可する。
+  3. `Settings → Environments → github-pages` に公開ブランチ制限がある場合、`arena/67346cc6-game` を許可する。
   4. Actionsの失敗した実行を開き、**Re-run failed jobs** を押す。
 - ワークフローがまだ既定ブランチにないと「Run workflow」が表示されないことがあります。その場合も既存実行の再実行、または作業ブランチへのpushで起動できます。
 - 秘密情報やアクセストークンをゲームのソースコードに書く必要はありません。
@@ -100,7 +100,7 @@ npm run deploy
 ### Cloudflare管理画面とGitHubを連携する場合
 
 1. Workers & Pagesから新しい **Worker** を作成し、このGitHubリポジトリを選択する。
-2. 公開するブランチに `arena/24efa9d6-game` を指定する（PRをマージした後は `main` も使用可能）。
+2. 公開するブランチに `arena/67346cc6-game` を指定する（PRをマージした後は `main` も使用可能）。
 3. ビルドコマンド：`npm ci && npm run build`
 4. デプロイコマンド：`npx wrangler deploy`
 5. ルートディレクトリ：リポジトリのルート。
@@ -148,3 +148,15 @@ worker/index.ts         Cloudflare WorkerとDurable Object
 ## フォント
 
 Noto Sans JP / Noto Serif JPを同梱しています（SIL Open Font License 1.1）。ライセンスは `public/licenses/` にあります。外部のフォントCDNには依存しません。
+
+## 装備システム（PoEを参考にした独自実装）
+
+- 武器は片手剣・刀・斧・槌・短刀・両手剣・弓・弩の8種。物理ダメージ幅、攻撃速度、クリティカル率、射程、スタミナ消費が異なります。
+- 頭・胸・手・足・盾・護符・指輪を装備できます。装甲は物理ダメージを軽減、回避は攻撃を確率で無効化、エネルギーシールドはHPより先に消費され、4秒未被弾で回復します。火・冷気・雷耐性の上限は75%です。
+- レアリティは白のノーマル（修飾なし）、青のマジック（最大1接頭辞＋1接尾辞）、黄のレア（最大3接頭辞＋3接尾辞）、橙のユニーク（固定修飾）の4段階です。ユニークは必ずしも最強ではありません。
+- ベース固有の暗黙修飾と、ランダムな明示修飾を分離。アイテムレベルで修飾の強い段階が解放されます。詳細表示ではT Iが最強です。
+- 拠点の「装備とステータス」で装備・支給剣/刀の切替が可能です。倉庫の装備カードから装着、Tabのバックパックから遠征中にも交換できます。カードの「詳細」で全修飾を確認できます。
+- 両手剣装備時は弓を使用できず、盾と弓の修飾も無効です。装備交換でHPを回復することはありません。
+- 宝箱と敵から装備がドロップし、エリート3体はレア装備を確定で落とします。ドロップの光柱とミニマップ色もレアリティに対応します。
+- 生還時は遠征終了時の装備を維持し、バックパックの戦利品を倉庫へ保管します。失敗時は新しく拾った装備を失い、出撃前の装備は保護されます。
+- 既存v1セーブの物資・銀貨・進行状況を引き継ぎます。オンラインの装備値はサーバーで再生成しますが、所有権は従来通りローカル保存であり、不正な装備の所有を完全に防ぐ経済サーバーではありません。
