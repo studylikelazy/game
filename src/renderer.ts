@@ -50,6 +50,8 @@ type FxParticle = {
 type BloodDecal = { x: number; y: number; size: number; rotation: number; alpha: number };
 type DamageNumber = { x: number; y: number; value: number; life: number; maxLife: number; color: string; size: number };
 type RingFx = { x: number; y: number; life: number; maxLife: number; from: number; to: number; color: string; width: number; glow: boolean };
+/** A short-lived melee slash or bow muzzle flash spawned when an accepted attack lands. */
+type AttackFx = { x: number; y: number; angle: number; life: number; maxLife: number; range: number; color: string; kind: 'melee' | 'bow'; };
 /** A pooled light: warm braziers, cold waypoints, rarity beams and the player's own aura. */
 type Light = { x: number; y: number; radius: number; r: number; g: number; b: number; intensity: number; flicker: number };
 
@@ -97,6 +99,8 @@ export class Renderer {
   private blood: BloodDecal[] = [];
   private damageNumbers: DamageNumber[] = [];
   private rings: RingFx[] = [];
+  private attackFx: AttackFx[] = [];
+  private prevAttackSerial = new Map<string, number>();
   private lastDrawTime: number | null = null;
   private emberClock = 0;
   private randomState = 0x4a534845;
@@ -272,7 +276,7 @@ export class Renderer {
   }
 
   screenToWorld(x: number, y: number) {
-    return { x: (x - this.width / 2) / this.camera.zoom + this.camera.x, y: (y - this.height / 2) / this.camera.zoom + this.camera.y };
+    return { x: (x - this.width / 2 - this.shakeX) / this.camera.zoom + this.camera.x, y: (y - this.height / 2 - this.shakeY) / this.camera.zoom + this.camera.y };
   }
 
   private random() {
@@ -1208,6 +1212,8 @@ export class Renderer {
     this.blood = [];
     this.damageNumbers = [];
     this.rings = [];
+    this.attackFx = [];
+    this.prevAttackSerial.clear();
     this.shake = 0;
     this.emberClock = 0;
   }
@@ -1223,6 +1229,34 @@ export class Renderer {
       this.prevHp.set(actor.id, actor.hp);
     }
     for (const id of this.prevHp.keys()) if (!seen.has(id)) { this.prevHp.delete(id); this.defeatedAt.delete(id); }
+  }
+
+  /** Spawns a slash / muzzle flash whenever an accepted attack serial advances. */
+  private observeAttacks(state: GameState, playerId: string, lobby: boolean) {
+    if (lobby) { this.prevAttackSerial.clear(); return; }
+    const seen = new Set<string>();
+    for (const player of state.players) {
+      seen.add(player.id);
+      const serial = player.attackSerial ?? 0;
+      const previous = this.prevAttackSerial.get(player.id);
+      if (previous !== undefined && serial > previous) {
+        const usingBow = player.weapon === 'bow';
+        const color = player.id === playerId ? '#ffe0a3' : '#ff8a7a';
+        this.attackFx.push({
+          x: player.x,
+          y: player.y,
+          angle: player.angle,
+          life: usingBow ? .18 : .26,
+          maxLife: usingBow ? .18 : .26,
+          range: usingBow ? 40 : 74,
+          color,
+          kind: usingBow ? 'bow' : 'melee',
+        });
+        if (this.attackFx.length > 40) this.attackFx.splice(0, this.attackFx.length - 40);
+      }
+      this.prevAttackSerial.set(player.id, serial);
+    }
+    for (const id of this.prevAttackSerial.keys()) if (!seen.has(id)) this.prevAttackSerial.delete(id);
   }
 
   private spawnHit(actor: Actor, loss: number, self: boolean, defeated: boolean) {
@@ -1315,11 +1349,14 @@ export class Renderer {
       this.hitParticles = this.hitParticles.filter(particle => particle.life > 0);
       for (const ring of this.rings) ring.life -= dt;
       this.rings = this.rings.filter(ring => ring.life > 0);
+      for (const fx of this.attackFx) fx.life -= dt;
+      this.attackFx = this.attackFx.filter(fx => fx.life > 0);
       this.shake *= Math.pow(.06, dt);
     } else {
       this.fireEmbers = [];
       this.hitParticles = [];
       this.rings = [];
+      this.attackFx = [];
       this.shake = 0;
     }
 
@@ -1344,6 +1381,7 @@ export class Renderer {
     this.lastDrawTime = time;
     this.lastState = state;
     this.observeHp(state, playerId, lobby);
+    this.observeAttacks(state, playerId, lobby);
     this.advanceFx(dt);
 
     this.observeMovement(state, dt);
@@ -1395,6 +1433,7 @@ export class Renderer {
       if (player.status !== 'alive' || player.swing <= 0 || player.weapon === 'bow' || lobby || !this.inView(player.x, player.y, 120)) continue;
       this.drawSlash(c, player, player.id === playerId, this.heldGlow(player));
     }
+    for (const fx of this.attackFx) if (this.inView(fx.x, fx.y, 120)) this.drawAttackFx(c, fx);
     this.drawArrows(c, state);
     this.drawCombatFx(c);
     this.drawFireEmbers(c);
@@ -1888,6 +1927,46 @@ export class Renderer {
       c.shadowBlur = 9 * scale;
       c.strokeText(String(number.value), number.x, number.y);
       c.fillText(String(number.value), number.x, number.y);
+    }
+    c.restore();
+  }
+
+  private drawAttackFx(c: CanvasRenderingContext2D, fx: AttackFx) {
+    const progress = 1 - fx.life / fx.maxLife;
+    c.save();
+    c.translate(fx.x, fx.y);
+    c.rotate(fx.angle);
+    c.globalCompositeOperation = 'lighter';
+    if (fx.kind === 'melee') {
+      const radius = fx.range * (.55 + progress * .75);
+      c.globalAlpha = (1 - progress) * .9;
+      c.strokeStyle = fx.color;
+      c.lineWidth = 3.2 / Math.max(.7, this.camera.zoom);
+      c.shadowColor = fx.color;
+      c.shadowBlur = 16 / Math.max(.7, this.camera.zoom);
+      c.beginPath();
+      c.arc(0, 0, radius, -1.9 + progress * .5, .35 + progress * .45);
+      c.stroke();
+      c.globalAlpha = (1 - progress) * .45;
+      c.fillStyle = fx.color;
+      c.beginPath();
+      c.arc(0, 0, 6, 0, Math.PI * 2);
+      c.fill();
+    } else {
+      c.globalAlpha = (1 - progress) * .95;
+      c.fillStyle = fx.color;
+      c.shadowColor = fx.color;
+      c.shadowBlur = 18 / Math.max(.7, this.camera.zoom);
+      c.beginPath();
+      c.arc(0, 0, 5 + progress * 9, 0, Math.PI * 2);
+      c.fill();
+      c.globalAlpha = (1 - progress) * .55;
+      c.strokeStyle = fx.color;
+      c.lineWidth = 2 / Math.max(.7, this.camera.zoom);
+      c.beginPath();
+      c.moveTo(0, 0);
+      c.lineTo(26 + progress * 18, 0);
+      c.stroke();
     }
     c.restore();
   }

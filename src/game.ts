@@ -94,6 +94,8 @@ export interface Player extends Actor {
   bag: BagEntry[];
   status: 'alive' | 'dead' | 'extracted';
   extraction: number;
+  /** Seconds of uninterrupted channelling needed to extract; camp upgrades shorten it. Defaults to 5. */
+  extractTime?: number;
   kills: number;
   dodge: number;
   dodgeCooldown: number;
@@ -157,9 +159,30 @@ export const weaponKind = (player: Player): WeaponKind => {
   return gear ? WEAPON_BY_ID[gear.base]?.kind ?? 'sword' : 'sword';
 };
 
-export function makeGame(pvp = false): GameState {
-  const random = seeded(83);
-  const spots = [[510, 1330], [810, 650], [1130, 520], [790, 920], [1180, 850], [1580, 505], [1410, 1130], [1060, 1360], [440, 710], [1750, 860], [1240, 300], [2000, 1290], [640, 1450], [1370, 650]];
+export const STAGE_COUNT = 3;
+export const STAGES = [
+  { id: 'blackpine', name: '黒松の辺境', subtitle: 'BLACKPINE FRONTIER' },
+  { id: 'ashen_monastery', name: '灰の修道院', subtitle: 'ASHEN MONASTERY' },
+  { id: 'frozen_ford', name: '凍てつく渡し', subtitle: 'FROZEN FORD' },
+] as const;
+
+const STAGE_LOOT_SPOTS: number[][][] = [
+  [[510, 1330], [810, 650], [1130, 520], [790, 920], [1180, 850], [1580, 505], [1410, 1130], [1060, 1360], [440, 710], [1750, 860], [1240, 300], [2000, 1290], [640, 1450], [1370, 650]],
+  [[1890, 470], [1590, 1150], [1270, 1280], [1610, 880], [1220, 950], [820, 1295], [990, 670], [1340, 440], [1960, 1090], [650, 1040], [1160, 1440], [400, 510], [1760, 250], [1030, 340]],
+  [[340, 470], [640, 1150], [960, 1280], [790, 880], [1180, 950], [1580, 1295], [1410, 670], [1060, 440], [440, 1090], [1760, 1040], [1240, 1440], [2000, 510], [640, 250], [1370, 340]],
+];
+const STAGE_ENEMY_SPOTS: number[][][] = [
+  [[730, 1110], [900, 650], [1210, 800], [1400, 510], [1630, 850], [1050, 1150], [530, 740], [1560, 1330], [1830, 1210], [1160, 360], [1760, 510], [620, 1060]],
+  [[1670, 690], [1500, 1150], [1190, 1000], [1000, 1310], [770, 950], [1350, 650], [1870, 1060], [840, 470], [570, 790], [1240, 1440], [640, 250], [1960, 510]],
+  [[730, 690], [900, 1150], [1210, 1000], [1400, 1310], [1630, 950], [1050, 650], [530, 1060], [1560, 470], [1830, 790], [1160, 1440], [1760, 250], [620, 510]],
+];
+
+export function makeGame(pvp: boolean | string = false, stage: number | string = 0): GameState {
+  if (typeof pvp === 'string') { stage = pvp; pvp = false; }
+  const stageIndex = typeof stage === 'string' ? Math.max(0, STAGES.findIndex(s => s.id === stage)) : Math.max(0, Math.min(STAGE_COUNT - 1, Math.floor(stage)));
+  const isPvp = pvp === true;
+  const random = seeded(83 + stageIndex * 17);
+  const spots = STAGE_LOOT_SPOTS[stageIndex];
   const kinds: MaterialKind[] = ['coin', 'iron', 'cloth', 'herb', 'relic', 'ruby'];
   /** Deeper parts of the map carry higher item levels, exactly like a deeper area in PoE. */
   const ilvlAt = (x: number, y: number) => Math.max(1, Math.min(12, 1 + Math.floor(Math.hypot(x - 1200, y - 900) / 220)));
@@ -177,7 +200,7 @@ export function makeGame(pvp = false): GameState {
     if (random() < .16) items.push(rollDrop(gearSlot(), ilvl, Math.floor(random() * 1e9)));
     return { id: `loot-${i}`, x, y, opened: false, kind: (i % 4 === 0 ? 'herb' : 'chest') as Loot['kind'], items };
   });
-  const enemySpots = [[730, 1110], [900, 650], [1210, 800], [1400, 510], [1630, 850], [1050, 1150], [530, 740], [1560, 1330], [1830, 1210], [1160, 360], [1760, 510], [620, 1060]];
+  const enemySpots = STAGE_ENEMY_SPOTS[stageIndex];
   const enemies = enemySpots.map(([x, y], i) => {
     const kind = (i % 4 === 0 ? 'knight' : i % 3 === 0 ? 'wolf' : 'bandit') as Enemy['kind'];
     const spec = ENEMY_KINDS[kind];
@@ -188,7 +211,7 @@ export function makeGame(pvp = false): GameState {
       kind, phase: random() * 6, armour: Math.round(spec.armour * (elite ? 1.6 : 1)), res: { ...spec.res }, elite,
     };
   });
-  return { time: 0, duration: 720, pvp, ended: false, sequence: 0, players: [], arrows: [], loot, enemies, rng: 0x9E3779B9 };
+  return { time: 0, duration: 720, pvp: isPvp, ended: false, sequence: 0, players: [], arrows: [], loot, enemies, rng: 0x9E3779B9 };
 }
 
 export function addPlayer(state: GameState, id: string, name = '名もなき旅人', meleeChoice: 'sword' | 'katana' = 'sword', loadout: Partial<Record<Slot, Gear>> = {}): Player {
@@ -406,7 +429,8 @@ export function stepGame(state: GameState, delta: number) {
       } else if (usingBow) notify(p, '矢がありません · 1キーで近接武器');
     }
     const exit = EXITS.find(e => distance(p, e) < 65);
-    if (exit && i.interact) { p.extraction += dt; if (p.extraction >= 5) { p.status = 'extracted'; notify(p, '脱出成功'); } }
+    const extractNeed = p.extractTime ?? 5;
+    if (exit && i.interact) { p.extraction += dt; if (p.extraction >= extractNeed) { p.status = 'extracted'; notify(p, '脱出成功'); } }
     else { p.extraction = 0; if (i.interact) { const loot = state.loot.find(l => !l.opened && distance(l, p) < 74); if (loot) collectLoot(p, loot); } }
   }
   for (const e of state.enemies) {
