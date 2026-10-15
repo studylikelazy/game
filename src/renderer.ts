@@ -758,10 +758,15 @@ export class Renderer {
     c.beginPath();
     c.ellipse(1740, 950, 190, 130, -.2, 0, TAU);
     c.fill();
-    c.globalAlpha = .3;
-    c.fillStyle = '#2f3a26';
+    c.globalAlpha = .22;
+    c.fillStyle = '#272c22';
     c.beginPath();
     c.ellipse(1760, 990, 150, 96, 0, 0, TAU);
+    c.fill();
+    c.globalAlpha = .12;
+    c.fillStyle = '#3a4430';
+    c.beginPath();
+    c.ellipse(1730, 960, 110, 62, -.3, 0, TAU);
     c.fill();
     c.globalAlpha = 1;
     for (let i = 0; i < 26; i++) {
@@ -1152,19 +1157,25 @@ export class Renderer {
         c.lineTo(x + dir * s * (.86 + tint * .2), h - s * .74);
         c.stroke();
       }
-      const palette = tint > .86 ? ['#5b5030', '#6f6039', '#827044'] : tint > .5 ? ['#2d4a34', '#3a5c3c', '#476e46'] : ['#243a2c', '#2f4c36', '#3a5c40'];
+      const palette = tint > .86 ? ['#4a4126', '#5b4e2c', '#6a5a34'] : tint > .5 ? ['#22392a', '#2c4830', '#35553a'] : ['#1b2d22', '#243a2b', '#2d4834'];
+      // A dark mass under the clusters keeps the canopy from floating.
+      c.fillStyle = '#141c16';
+      c.globalAlpha = .5;
+      c.beginPath();
+      c.ellipse(x - 4, y - s * .86, s * .95, s * .6, 0, 0, TAU);
+      c.fill();
       for (let j = 0; j < 7; j++) {
         const a = j * 2.2;
         c.fillStyle = palette[j % 3];
-        c.globalAlpha = .82;
+        c.globalAlpha = .88;
         c.beginPath();
         c.ellipse(x + Math.cos(a) * s * .5 - 3, y - s * .95 + Math.sin(a) * s * .38, s * .42, s * .3, a, 0, TAU);
         c.fill();
       }
       c.globalAlpha = 1;
       // Rim light on the canopy edge facing the moon.
-      c.strokeStyle = '#c2d6b155';
-      c.lineWidth = 1.3;
+      c.strokeStyle = '#b8ccab3d';
+      c.lineWidth = 1.2;
       c.beginPath();
       c.ellipse(x - s * .18, y - s * 1.06, s * .46, s * .33, -.4, Math.PI * .8, Math.PI * 1.75);
       c.stroke();
@@ -1950,7 +1961,7 @@ export class Renderer {
       // Drifting mist ridges.
       c.save();
       c.globalCompositeOperation = 'lighter';
-      c.globalAlpha = .022;
+      c.globalAlpha = .017;
       for (let i = 0; i < 2; i++) {
         const ox = ((time * (9 + i * 5)) % (w + 900)) - 450;
         const oy = h * (.16 + i * .46) + Math.sin(time * .2 + i) * 26;
