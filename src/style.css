@@ -7,3 +7,19 @@
 
 .segmented button[aria-disabled="true"]{opacity:.45;cursor:help}
 .in-raid .map-top{right:64px}
+.game-top-actions{display:flex;align-items:center;gap:6px}
+.game-top-actions .fullscreen-button{display:none;align-items:center;justify-content:center;padding:0;color:#d7d9c1}
+.game-top-actions .fullscreen-button .icon{width:15px;height:15px}
+.game-top-actions .fullscreen-button[aria-pressed="true"]{background:#2b3a2ef2;border-color:#c4b18499}
+@media(pointer:coarse){.in-raid .map-top{right:100px}.game-top-actions .fullscreen-button{display:inline-flex}}
+body.immersive-raid{overflow:hidden;overscroll-behavior:none;background:#0b1411}
+body.immersive-raid .rail,body.immersive-raid .topbar,body.immersive-raid .page-heading,body.immersive-raid .loadout-panel,body.immersive-raid .contracts-section,body.immersive-raid .footer{display:none!important}
+body.immersive-raid .workspace{margin-left:0;padding-right:0}
+body.immersive-raid main{padding:0;margin:0;max-width:none}
+body.immersive-raid .map-panel{position:fixed;inset:0;z-index:10;width:100%;min-height:0;height:100vh;height:100dvh;border:0;border-radius:0;box-shadow:none}
+@media(pointer:coarse){
+body.immersive-raid .map-top,body.immersive-raid .game-top-actions,body.immersive-raid .raid-timer{margin-top:env(safe-area-inset-top)}
+body.immersive-raid .map-top,body.immersive-raid .raid-timer,body.immersive-raid .hotbar,body.immersive-raid .vitals{margin-left:env(safe-area-inset-left)}
+body.immersive-raid .map-top,body.immersive-raid .game-top-actions{margin-right:env(safe-area-inset-right)}
+body.immersive-raid .hotbar,body.immersive-raid .vitals,body.immersive-raid .interaction,body.immersive-raid .touch-controls{margin-bottom:env(safe-area-inset-bottom)}
+}
