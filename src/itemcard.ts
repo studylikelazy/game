@@ -1,3 +1,4 @@
+import { weaponArt } from './weaponArt';
 import {
   AFFIX_BY_ID, RARITIES, SLOT_LABELS, WEAPON_BY_ID, affixLines, baseOf, entryIcon, entryName,
   entryRarity, entryValue, formatAffix, gearDefences, gearMods, isGear, tierLabel, weaponProfile,
@@ -89,7 +90,7 @@ export function gearCard(gear: Gear, extra = '') {
     : [defences.armour && `装甲 ${defences.armour}`, defences.evasion && `回避 ${defences.evasion}`, defences.energyShield && `ES ${defences.energyShield}`].filter(Boolean).join(' · ') || '防御特化';
   const affixes = affixLines(gear).slice(0, 3).map(a => `<small class="affix-line ${a.local ? 'local' : 'global'}">${esc(a.text)}</small>`).join('');
   return `<div class="item-card rarity-${gear.rarity}" data-gear="${esc(gear.id)}" title="${esc(gear.name)}">
-    <span class="item-icon">${icon(entryIcon(gear))}</span>
+    <span class="item-icon">${weaponArt(profile?.kind ?? '', entryIcon(gear))}</span>
     <b style="color:${info.color}">${esc(gear.name)}</b>
     <small>${esc(summary)}</small>
     ${affixes}

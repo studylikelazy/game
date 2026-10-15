@@ -16,10 +16,12 @@ export interface Save {
   collected: number;
   claimed: string[];
   volume: number;
+  /** Environmental bed (wind, fire, wildlife) volume, kept separate from combat SFX. */
+  ambientVolume: number;
   reducedMotion: boolean;
 }
 
-const initial = (): Save => ({ version: 2, name: '名もなき旅人', coins: 1250, stash: [], loadout: {}, meleeChoice: 'sword', raids: 0, escapes: 0, kills: 0, collected: 0, claimed: [], volume: .25, reducedMotion: false });
+const initial = (): Save => ({ version: 2, name: '名もなき旅人', coins: 1250, stash: [], loadout: {}, meleeChoice: 'sword', raids: 0, escapes: 0, kills: 0, collected: 0, claimed: [], volume: .25, ambientVolume: .55, reducedMotion: false });
 
 const MATERIALS = Object.keys(ITEMS) as MaterialKind[];
 
@@ -64,6 +66,7 @@ export function loadSave(): Save {
     safe.meleeChoice = raw.meleeChoice === 'katana' ? 'katana' : 'sword';
     safe.claimed = Array.isArray(raw.claimed) ? raw.claimed.filter((x: unknown) => typeof x === 'string').slice(0, 20) : [];
     safe.volume = typeof raw.volume === 'number' && Number.isFinite(raw.volume) ? Math.max(0, Math.min(1, raw.volume)) : .25;
+    safe.ambientVolume = typeof raw.ambientVolume === 'number' && Number.isFinite(raw.ambientVolume) ? Math.max(0, Math.min(1, raw.ambientVolume)) : .55;
     safe.reducedMotion = raw.reducedMotion === true;
     return safe;
   } catch { return initial(); }

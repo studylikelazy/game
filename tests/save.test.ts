@@ -20,6 +20,24 @@ describe('local persistence', () => {
     expect(loaded.loadout.melee?.name).toBe(save.loadout.melee!.name);
     expect(loaded.meleeChoice).toBe('katana');
   });
+  it('migrates old audio preferences and preserves separate ambient volume', () => {
+    data = JSON.stringify({ version: 2, volume: .4 });
+    expect(loadSave().ambientVolume).toBe(.55);
+    const save = loadSave();
+    save.volume = 0;
+    save.ambientVolume = .7;
+    expect(storeSave(save)).toBe(true);
+    expect(loadSave().volume).toBe(0);
+    expect(loadSave().ambientVolume).toBe(.7);
+  });
+  it('clamps ambient volume and rejects invalid values', () => {
+    data = JSON.stringify({ version: 2, ambientVolume: -3 });
+    expect(loadSave().ambientVolume).toBe(0);
+    data = JSON.stringify({ version: 2, ambientVolume: 50 });
+    expect(loadSave().ambientVolume).toBe(1);
+    data = JSON.stringify({ version: 2, ambientVolume: 'loud' });
+    expect(loadSave().ambientVolume).toBe(.55);
+  });
   it('recovers from corrupt JSON and unsupported versions', () => { data = '{broken'; expect(loadSave().coins).toBe(1250); data = '{"version":2}'; expect(loadSave().coins).toBe(1250); });
   it('validates items and counters rather than trusting stored JSON', () => {
     data = JSON.stringify({ version: 1, coins: -12, kills: 'bad', volume: 99, name: '<b>test</b>', stash: [{ kind: 'ruby', amount: 1 }, { kind: 'ruby', amount: -1 }, { kind: 'fake', amount: 1 }, { kind: 'toString', amount: 1 }], claimed: [true, 'first'] });
