@@ -7,6 +7,8 @@ import { Renderer } from './renderer';
 import { loadSave, storeSave } from './save';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
+/** Canvas drawing is paced to 60fps; input and simulation still run on every display refresh. */
+const TARGET_FRAME_MS = 1000 / 60;
 const save = loadSave();
 const staticHost = import.meta.env.MODE === 'pages';
 let game: GameState = makeGame(), playerId = 'local', playing = false, paused = false, mapOpen = false, mode: 'solo' | 'online' = 'solo', primary: 'sword' | 'katana' = 'sword';
@@ -54,7 +56,7 @@ app.innerHTML = `
           <div class="north">N<span>⌃</span><i></i></div>
           <div class="map-coordinates">N 48° 21′ &nbsp; E 12° 04′<span>ASHENFELL CARTOGRAPHIC SOCIETY</span></div>
           <div class="map-bottom" id="lobby-map-bottom"><div class="map-legend"><span><i class="legend-loot"></i>探索地点</span><span><i class="legend-exit"></i>脱出地点</span></div><div class="weather">${icon('leaf')}晩秋 <span>曇り · 8°C</span></div></div>
-          <div class="game-hud hidden" id="game-hud"><div class="raid-timer">${icon('clock')}<b id="timer">12:00</b><span>残り時間</span></div><div class="game-top-actions"><button id="pause-button" title="メニュー (Esc)">II</button></div><div class="vitals"><div class="vital-line"><span>HP</span><div class="bar"><i id="hp-bar"></i></div><b id="hp-label">100</b></div><div class="vital-line stamina"><span>ST</span><div class="bar"><i id="st-bar"></i></div><b id="st-label">100</b></div></div><div class="hotbar"><button id="slot-primary" class="hot-slot selected"><kbd>1</kbd>${icon('sword')}<span>剣</span></button><button id="slot-bow" class="hot-slot"><kbd>2</kbd>${icon('bow')}<span id="arrows">24</span></button><button id="slot-heal" class="hot-slot"><kbd>Q</kbd>${icon('potion')}<span id="heals">3</span></button><button id="slot-bag" class="hot-slot"><kbd>Tab</kbd>${icon('backpack')}<span id="bag-count">0/12</span></button></div><div id="interaction" class="interaction hidden"></div><div id="game-message" class="game-message"></div><div class="touch-controls"><div class="touch-pad"><button data-touch="w">↑</button><button data-touch="a">←</button><button data-touch="s">↓</button><button data-touch="d">→</button></div><div class="touch-actions"><button data-action="interact">E</button><button data-action="dodge">回避</button><button data-action="attack" class="touch-attack">${icon('sword')}</button></div></div></div>
+          <div class="game-hud hidden" id="game-hud"><div class="raid-timer">${icon('clock')}<b id="timer">12:00</b><span>残り時間</span></div><div class="game-top-actions"><button id="pause-button" title="メニュー (Esc)">II</button><button id="fullscreen-button" class="fullscreen-button" title="全画面表示" aria-label="全画面表示" aria-pressed="false">${icon('fullscreen')}</button></div><div class="vitals"><div class="vital-line"><span>HP</span><div class="bar"><i id="hp-bar"></i></div><b id="hp-label">100</b></div><div class="vital-line stamina"><span>ST</span><div class="bar"><i id="st-bar"></i></div><b id="st-label">100</b></div></div><div class="hotbar"><button id="slot-primary" class="hot-slot selected"><kbd>1</kbd>${icon('sword')}<span>剣</span></button><button id="slot-bow" class="hot-slot"><kbd>2</kbd>${icon('bow')}<span id="arrows">24</span></button><button id="slot-heal" class="hot-slot"><kbd>Q</kbd>${icon('potion')}<span id="heals">3</span></button><button id="slot-bag" class="hot-slot"><kbd>Tab</kbd>${icon('backpack')}<span id="bag-count">0/12</span></button></div><div id="interaction" class="interaction hidden"></div><div id="game-message" class="game-message"></div><div class="touch-controls"><div class="touch-pad"><button data-touch="w">↑</button><button data-touch="a">←</button><button data-touch="s">↓</button><button data-touch="d">→</button></div><div class="touch-actions"><button data-action="interact">E</button><button data-action="dodge">回避</button><button data-action="attack" class="touch-attack">${icon('sword')}</button></div></div></div>
           <div class="map-grain"></div>
         </section>
         <aside class="loadout-panel"><div class="panel-title"><div><span class="eyebrow">YOUR LOADOUT</span><h2 id="loadout-heading">出撃準備</h2></div>${icon('shield')}</div><div class="character-preview">${portrait}<div class="character-label"><span class="small-dot"></span>準備完了</div><span class="character-class">WANDERER</span><span class="character-number">I</span></div><div class="equipment-heading"><span>装備</span><span>初期装備 · 支給品</span></div><button class="weapon-card" id="weapon-select" title="クリックで剣と刀を切り替え"><span class="weapon-illustration">${icon('sword')}</span><span><small>メイン武器 <span class="tier">I</span></small><b id="weapon-name">鉄のロングソード</b><em id="weapon-detail">斬撃 28 · 片手剣</em></span>${icon('chevron')}</button><div class="equipment-grid"><div class="equipment-item">${icon('bow')}<span>狩人の長弓</span><small>矢 ×24</small></div><div class="equipment-item">${icon('shield')}<span>旅人の外套</span><small>軽装備</small></div><div class="equipment-item">${icon('potion')}<span>治療薬</span><small>×3</small></div><div class="equipment-item">${icon('backpack')}<span>革の背嚢</span><small>12スロット</small></div></div><div class="loadout-weight">${icon('backpack')}<span id="weight-text">持ち帰り容量</span><b id="weight-value">22.0 <small>kg</small></b></div><div class="deploy-section"><div class="deploy-note">${icon('help')}<span id="deploy-note">倒れると、遠征中の戦利品を失います。</span></div><button class="deploy-button" id="deploy">${icon('sword')}<span>出撃する<small>ENTER THE FRONTIER</small></span>${icon('chevron')}</button><div class="server-status"><span class="small-dot"></span><span id="server-label">ソロ遠征</span><span id="server-detail">ローカルセーブ</span></div></div></aside>
@@ -163,7 +165,7 @@ function deploy() {
   $('connect-room').onclick = () => { const room = $<HTMLInputElement>('room-input').value.trim(); if (!/^[a-zA-Z0-9-]{1,24}$/.test(room)) { $('connection-error').textContent = '合言葉は半角英数字とハイフンで1〜24文字にしてください。'; return; } connectOnline(room); };
 }
 function returnToBase() {
-  playing = false; connecting = false; resultShown = false; const old = socket; socket = null; old?.close(); game = makeGame(); playerId = 'local'; currentModal = ''; paused = false; mapOpen = false; clearInput(); $('modal-root').innerHTML = ''; document.body.classList.remove('in-raid'); $('game-hud').classList.add('hidden'); $('map-title').classList.remove('hidden'); $('lobby-map-bottom').classList.remove('hidden'); $('map-status').textContent = '出撃可能エリア'; $('loadout-heading').textContent = '出撃準備'; $('deploy').innerHTML = `${icon('sword')}<span>出撃する<small>ENTER THE FRONTIER</small></span>${icon('chevron')}`; $('weight-text').textContent = '持ち帰り容量'; $('weight-value').innerHTML = '22.0 <small>kg</small>'; setMode(mode);
+  playing = false; connecting = false; resultShown = false; const old = socket; socket = null; old?.close(); game = makeGame(); playerId = 'local'; currentModal = ''; paused = false; mapOpen = false; clearInput(); $('modal-root').innerHTML = ''; document.body.classList.remove('in-raid'); leaveImmersive(); $('game-hud').classList.add('hidden'); $('map-title').classList.remove('hidden'); $('lobby-map-bottom').classList.remove('hidden'); $('map-status').textContent = '出撃可能エリア'; $('loadout-heading').textContent = '出撃準備'; $('deploy').innerHTML = `${icon('sword')}<span>出撃する<small>ENTER THE FRONTIER</small></span>${icon('chevron')}`; $('weight-text').textContent = '持ち帰り容量'; $('weight-value').innerHTML = '22.0 <small>kg</small>'; setMode(mode);
 }
 function finishRaid(p: Player) {
   if (resultShown) return;
@@ -194,6 +196,33 @@ document.querySelectorAll<HTMLElement>('[data-nav]').forEach(el => el.onclick = 
 document.querySelector('.brand-mark')!.addEventListener('click', e => { e.preventDefault(); if (playing) pauseMenu(); else closeModal(); });
 $('solo-mode').onclick = () => setMode('solo'); $('online-mode').onclick = () => setMode('online'); $('weapon-select').onclick = setPrimary; $('deploy').onclick = deploy; $('all-quests').onclick = () => playing ? toast('依頼は拠点で確認できます') : quests(); $('contract-grid').onclick = () => playing ? toast('依頼は拠点で確認できます') : quests(); $('controls-link').onclick = help; $('map-button').onclick = toggleMap; $('pause-button').onclick = pauseMenu;
 $('slot-primary').onclick = () => { input.weapon = primary; }; $('slot-bow').onclick = () => { input.weapon = 'bow'; }; $('slot-heal').onclick = () => { input.heal = true; setTimeout(() => input.heal = false, 150); }; $('slot-bag').onclick = backpack;
+
+// Mobile immersive raid: use the Fullscreen API when available, otherwise hide the site chrome with body.immersive-raid (iOS Safari, embedded browsers).
+const fullscreenButton = $<HTMLButtonElement>('fullscreen-button');
+const isImmersive = () => document.body.classList.contains('immersive-raid');
+function syncFullscreenButton() {
+  const on = isImmersive();
+  fullscreenButton.innerHTML = icon(on ? 'exitFullscreen' : 'fullscreen');
+  fullscreenButton.title = on ? '全画面を解除' : '全画面表示';
+  fullscreenButton.setAttribute('aria-label', fullscreenButton.title);
+  fullscreenButton.setAttribute('aria-pressed', String(on));
+}
+function setImmersive(on: boolean) { document.body.classList.toggle('immersive-raid', on); syncFullscreenButton(); }
+async function enterImmersive() {
+  const root = document.documentElement;
+  if (typeof root.requestFullscreen === 'function' && document.fullscreenEnabled && !document.fullscreenElement) {
+    try { await root.requestFullscreen(); setImmersive(true); return; } catch { /* The browser refused; use the layout fallback below. */ }
+  }
+  setImmersive(true);
+}
+function leaveImmersive() {
+  setImmersive(false);
+  if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+}
+fullscreenButton.onclick = () => { if (isImmersive()) leaveImmersive(); else void enterImmersive(); };
+// Leaving native fullscreen with the system gesture or Esc must also restore the normal layout.
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && isImmersive()) setImmersive(false); });
+syncFullscreenButton();
 
 window.addEventListener('keydown', e => {
   if (currentModal && e.key === 'Tab') {
@@ -248,6 +277,7 @@ const touchState = { attack: false, interact: false, dodge: false };
 document.querySelectorAll<HTMLButtonElement>('[data-touch]').forEach(b => { const key = b.dataset.touch!; b.onpointerdown = e => { e.preventDefault(); b.setPointerCapture(e.pointerId); keys.add(key); }; b.onpointerup = b.onpointercancel = () => keys.delete(key); });
 document.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(b => { const action = b.dataset.action as keyof typeof touchState; b.onpointerdown = e => { e.preventDefault(); b.setPointerCapture(e.pointerId); touchState[action] = true; }; b.onpointerup = b.onpointercancel = () => { touchState[action] = false; }; });
 let last = performance.now(), accumulator = 0, lastSwing = 0, lastHp = 100, lastBag = 0;
+let renderClock = -1, renderAccumulator = TARGET_FRAME_MS;
 function frame(now: number) {
   const delta = Math.min((now - last) / 1000, .1); last = now;
   if (playing && !resultShown) {
@@ -278,8 +308,14 @@ function frame(now: number) {
   }
   const renderPlayer = playing ? getPlayer() : undefined;
   if (renderPlayer && !cursorWorld) cursorWorld = { x: renderPlayer.x + Math.cos(input.angle) * 150, y: renderPlayer.y + Math.sin(input.angle) * 150 };
-  renderer.reducedMotion = save.reducedMotion;
-  renderer.draw(game, playerId, !playing, mapOpen, now / 1000, renderPlayer && cursorWorld ? { ...cursorWorld, hot: input.attack || renderPlayer.swing > 0 } : undefined);
+  // Time accumulation keeps Canvas output at ~60fps on 90/120/144Hz displays without the uneven 45fps cadence of skipping every other frame.
+  renderAccumulator += renderClock < 0 ? TARGET_FRAME_MS : Math.min(now - renderClock, 100);
+  renderClock = now;
+  if (renderAccumulator >= TARGET_FRAME_MS - .5) {
+    renderAccumulator = Math.max(0, renderAccumulator - TARGET_FRAME_MS);
+    renderer.reducedMotion = save.reducedMotion;
+    renderer.draw(game, playerId, !playing, mapOpen, now / 1000, renderPlayer && cursorWorld ? { ...cursorWorld, hot: input.attack || renderPlayer.swing > 0 } : undefined);
+  }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

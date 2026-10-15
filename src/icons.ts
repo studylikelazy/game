@@ -29,6 +29,8 @@ export const paths: Record<string, string> = {
   users: '<circle cx="9" cy="7" r="4"/><path d="M1 22v-3a8 8 0 0 1 16 0v3M16 3a4 4 0 0 1 0 8m2 3a6 6 0 0 1 5 6v2"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/>',
   flag: '<path d="M4 22V2m0 1c5-4 10 5 16 0v11c-6 5-11-4-16 0"/>',
+  fullscreen: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>',
+  exitFullscreen: '<path d="M9 4v5H4M15 4v5h5M15 20v-5h5M9 20v-5H4"/>',
 };
 export function icon(name: string, cls = '') { return `<svg class="icon ${cls}" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.shield}</svg>`; }
 export const raven = '<svg viewBox="0 0 64 64" fill="currentColor" aria-hidden="true"><path d="m32 4 5 12 21-7-8 14 12 1-16 10 7 8-16-4-5 22-5-22-16 4 7-8L2 24l12-1L6 9l21 7 5-12Zm-3 17-8 4 10 7 4-7 9-2-8-3-7 1Z"/></svg>';

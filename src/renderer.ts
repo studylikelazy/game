@@ -2,6 +2,12 @@ import { BUILDINGS, EXITS, WORLD, seeded, type Actor, type GameState, type Playe
 
 const TAU = Math.PI * 2;
 const FIRES: readonly [number, number][] = [[811, 1046], [1270, 780], [1570, 660]];
+/** High-DPI canvases are capped near this many backbuffer pixels; phones still keep up to 2x. */
+const MAX_BACKBUFFER_PIXELS = 2_000_000;
+/** Extra screen pixels kept around the visible rectangle so screen shake never reveals a culling edge. */
+const VIEW_MARGIN_PX = 16;
+const MINIMAP_W = 136;
+const MINIMAP_H = 102;
 
 type Aim = { x: number; y: number; hot: boolean };
 type Tree = { x: number; y: number; size: number; pine: boolean; tint: number };
@@ -26,6 +32,11 @@ export class Renderer {
   canvas: HTMLCanvasElement;
   ctx: CanvasRenderingContext2D;
   terrain: HTMLCanvasElement;
+  /** Pre-scaled terrain for the tactical minimap, built once instead of scaling the full world every frame. */
+  private minimapTerrain: HTMLCanvasElement;
+  /** Static vignette and top haze, rebuilt only when the canvas size changes. */
+  private atmosphere: HTMLCanvasElement | null = null;
+  private view = { x0: 0, y0: 0, x1: 0, y1: 0 };
   camera = { x: 1040, y: 930, zoom: .69 };
   width = 0;
   height = 0;
@@ -56,6 +67,10 @@ export class Renderer {
     this.terrain.width = WORLD.width;
     this.terrain.height = WORLD.height;
     this.buildTerrain();
+    this.minimapTerrain = document.createElement('canvas');
+    this.minimapTerrain.width = MINIMAP_W * 2;
+    this.minimapTerrain.height = MINIMAP_H * 2;
+    this.minimapTerrain.getContext('2d')!.drawImage(this.terrain, 0, 0, this.minimapTerrain.width, this.minimapTerrain.height);
     this.observer = new ResizeObserver(() => this.resize());
     this.observer.observe(canvas);
     this.resize();
@@ -65,9 +80,50 @@ export class Renderer {
     const r = this.canvas.getBoundingClientRect();
     this.width = r.width;
     this.height = r.height;
-    this.dpr = Math.min(devicePixelRatio, 2);
-    this.canvas.width = r.width * this.dpr;
-    this.canvas.height = r.height * this.dpr;
+    // Scale down only on high-DPI screens whose backbuffer would exceed the pixel budget.
+    const area = Math.max(1, r.width * r.height);
+    this.dpr = Math.max(1, Math.min(devicePixelRatio, 2, Math.sqrt(MAX_BACKBUFFER_PIXELS / area)));
+    this.canvas.width = Math.max(1, Math.floor(r.width * this.dpr));
+    this.canvas.height = Math.max(1, Math.floor(r.height * this.dpr));
+    this.buildAtmosphere();
+  }
+
+  /** Vignette and top haze depend only on the viewport size, so they are cached in a layer. */
+  private buildAtmosphere() {
+    const w = this.width;
+    const h = this.height;
+    if (!w || !h) { this.atmosphere = null; return; }
+    const layer = document.createElement('canvas');
+    layer.width = this.canvas.width;
+    layer.height = this.canvas.height;
+    const c = layer.getContext('2d')!;
+    c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    const vignette = c.createRadialGradient(w * .5, h * .1, h * .1, w * .5, h * .1, Math.max(w, h) * .76);
+    vignette.addColorStop(0, '#070e0d00');
+    vignette.addColorStop(.57, '#070e0d20');
+    vignette.addColorStop(1, '#070e0da8');
+    c.fillStyle = vignette;
+    c.fillRect(0, 0, w, h);
+    const top = c.createLinearGradient(0, 0, 0, h);
+    top.addColorStop(0, '#07100e65');
+    top.addColorStop(.4, '#80908007');
+    top.addColorStop(1, '#070e0d38');
+    c.fillStyle = top;
+    c.fillRect(0, 0, w, h);
+    this.atmosphere = layer;
+  }
+
+  /** World-space rectangle currently on screen, expanded by a small screen-space margin. */
+  private updateView() {
+    const zoom = this.camera.zoom;
+    const halfW = (this.width / 2 + VIEW_MARGIN_PX) / zoom;
+    const halfH = (this.height / 2 + VIEW_MARGIN_PX) / zoom;
+    this.view = { x0: this.camera.x - halfW, y0: this.camera.y - halfH, x1: this.camera.x + halfW, y1: this.camera.y + halfH };
+  }
+
+  private inView(x: number, y: number, pad: number) {
+    const v = this.view;
+    return x >= v.x0 - pad && x <= v.x1 + pad && y >= v.y0 - pad && y <= v.y1 + pad;
   }
 
   screenToWorld(x: number, y: number) {
@@ -511,6 +567,7 @@ export class Renderer {
 
     this.shakeX = this.reducedMotion ? 0 : Math.sin(time * 89.7) * this.shake * .72;
     this.shakeY = this.reducedMotion ? 0 : Math.cos(time * 117.1) * this.shake * .52;
+    this.updateView();
     c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     c.fillStyle = '#0b1411';
     c.fillRect(0, 0, w, h);
@@ -518,7 +575,7 @@ export class Renderer {
     c.translate(w / 2 + this.shakeX, h / 2 + this.shakeY);
     c.scale(this.camera.zoom, this.camera.zoom);
     c.translate(-this.camera.x, -this.camera.y);
-    c.drawImage(this.terrain, 0, 0);
+    this.drawTerrain(c);
 
     this.drawBlood(c);
     if (!lobby && p && !fullMap) this.drawPlayerAura(c, p);
@@ -526,12 +583,12 @@ export class Renderer {
     this.drawFireEmbers(c);
     this.drawLoot(c, state, lobby, time);
     this.drawExits(c);
-    for (const enemy of state.enemies) if (enemy.hp > 0 && !lobby) this.actor(c, enemy, false, false, enemy.kind);
+    for (const enemy of state.enemies) if (enemy.hp > 0 && !lobby && this.inView(enemy.x, enemy.y, 80)) this.actor(c, enemy, false, false, enemy.kind);
     this.drawArrows(c, state);
-    for (const player of state.players) if (player.status !== 'extracted' && !lobby) this.actor(c, player, true, player.id === playerId);
-    for (const enemy of state.enemies) if (enemy.hp > 0 && enemy.swing > 0 && !lobby) this.drawSlash(c, enemy, false);
+    for (const player of state.players) if (player.status !== 'extracted' && !lobby && this.inView(player.x, player.y, 80)) this.actor(c, player, true, player.id === playerId);
+    for (const enemy of state.enemies) if (enemy.hp > 0 && enemy.swing > 0 && !lobby && this.inView(enemy.x, enemy.y, 110)) this.drawSlash(c, enemy, false);
     for (const player of state.players) {
-      if (player.status !== 'alive' || player.swing <= 0 || player.weapon === 'bow' || lobby) continue;
+      if (player.status !== 'alive' || player.swing <= 0 || player.weapon === 'bow' || lobby || !this.inView(player.x, player.y, 110)) continue;
       this.drawSlash(c, player, player.id === playerId);
     }
     this.drawCombatFx(c);
@@ -557,6 +614,16 @@ export class Renderer {
     if (!lobby && !fullMap && aim) this.drawReticle(c, aim, time);
   }
 
+  /** Draws only the part of the world that is on screen; the full terrain bitmap is never scaled per frame. */
+  private drawTerrain(c: CanvasRenderingContext2D) {
+    const sx = Math.max(0, Math.floor(this.view.x0));
+    const sy = Math.max(0, Math.floor(this.view.y0));
+    const ex = Math.min(WORLD.width, Math.ceil(this.view.x1));
+    const ey = Math.min(WORLD.height, Math.ceil(this.view.y1));
+    if (ex <= sx || ey <= sy) return;
+    c.drawImage(this.terrain, sx, sy, ex - sx, ey - sy, sx, sy, ex - sx, ey - sy);
+  }
+
   private drawPlayerAura(c: CanvasRenderingContext2D, p: Player) {
     c.save();
     c.globalCompositeOperation = 'lighter';
@@ -573,6 +640,7 @@ export class Renderer {
   private drawFires(c: CanvasRenderingContext2D, time: number) {
     for (let i = 0; i < FIRES.length; i++) {
       const [x, y] = FIRES[i];
+      if (!this.inView(x, y, 110)) continue;
       const wobble = this.reducedMotion ? 0 : Math.sin(time * 6.5 + i * 1.7) * 4 + Math.sin(time * 11.7 + i) * 2;
       c.save();
       c.globalCompositeOperation = 'lighter';
@@ -620,6 +688,7 @@ export class Renderer {
     c.save();
     c.globalCompositeOperation = 'lighter';
     for (const ember of this.fireEmbers) {
+      if (!this.inView(ember.x, ember.y, ember.size + 4)) continue;
       const alpha = Math.max(0, ember.life / ember.maxLife);
       c.globalAlpha = alpha * .9;
       c.fillStyle = ember.color;
@@ -634,7 +703,7 @@ export class Renderer {
 
   private drawLoot(c: CanvasRenderingContext2D, state: GameState, lobby: boolean, time: number) {
     for (const loot of state.loot) {
-      if (loot.opened) continue;
+      if (loot.opened || !this.inView(loot.x, loot.y, 40)) continue;
       c.save();
       c.translate(loot.x, loot.y);
       c.fillStyle = '#0b14118a';
@@ -679,6 +748,7 @@ export class Renderer {
 
   private drawExits(c: CanvasRenderingContext2D) {
     for (const exit of EXITS) {
+      if (!this.inView(exit.x, exit.y, 110)) continue;
       c.save();
       c.translate(exit.x, exit.y);
       c.strokeStyle = '#a1b58b99';
@@ -712,6 +782,7 @@ export class Renderer {
     c.save();
     c.globalCompositeOperation = 'lighter';
     for (const arrow of state.arrows) {
+      if (!this.inView(arrow.x, arrow.y, 60)) continue;
       const tailX = arrow.x - arrow.vx * .042;
       const tailY = arrow.y - arrow.vy * .042;
       const trail = c.createLinearGradient(tailX, tailY, arrow.x, arrow.y);
@@ -747,6 +818,7 @@ export class Renderer {
 
   private drawBlood(c: CanvasRenderingContext2D) {
     for (const decal of this.blood) {
+      if (!this.inView(decal.x, decal.y, decal.size)) continue;
       c.save();
       c.translate(decal.x, decal.y);
       c.rotate(decal.rotation);
@@ -769,6 +841,7 @@ export class Renderer {
       c.save();
       c.globalCompositeOperation = 'lighter';
       for (const ring of this.rings) {
+        if (!this.inView(ring.x, ring.y, ring.to)) continue;
         const age = 1 - ring.life / ring.maxLife;
         const eased = 1 - (1 - age) * (1 - age);
         c.globalAlpha = (1 - age) * .9;
@@ -781,6 +854,7 @@ export class Renderer {
         c.stroke();
       }
       for (const particle of this.hitParticles) {
+        if (!this.inView(particle.x, particle.y, particle.size + 4)) continue;
         const alpha = Math.max(0, particle.life / particle.maxLife);
         c.globalAlpha = alpha;
         c.fillStyle = particle.color;
@@ -797,6 +871,7 @@ export class Renderer {
     c.textAlign = 'center';
     c.textBaseline = 'middle';
     for (const number of this.damageNumbers) {
+      if (!this.inView(number.x, number.y, 60)) continue;
       const alpha = Math.max(0, number.life / number.maxLife);
       c.globalAlpha = alpha;
       c.font = `700 ${number.size / Math.max(.55, this.camera.zoom)}px Georgia, "Noto Sans JP", serif`;
@@ -846,18 +921,7 @@ export class Renderer {
   }
 
   private drawAtmosphere(c: CanvasRenderingContext2D, w: number, h: number, lobby: boolean, p: Player | undefined, time: number) {
-    const vignette = c.createRadialGradient(w * .5, h * .1, h * .1, w * .5, h * .1, Math.max(w, h) * .76);
-    vignette.addColorStop(0, '#070e0d00');
-    vignette.addColorStop(.57, '#070e0d20');
-    vignette.addColorStop(1, '#070e0da8');
-    c.fillStyle = vignette;
-    c.fillRect(0, 0, w, h);
-    const top = c.createLinearGradient(0, 0, 0, h);
-    top.addColorStop(0, '#07100e65');
-    top.addColorStop(.4, '#80908007');
-    top.addColorStop(1, '#070e0d38');
-    c.fillStyle = top;
-    c.fillRect(0, 0, w, h);
+    if (this.atmosphere) c.drawImage(this.atmosphere, 0, 0, w, h);
     if (!this.reducedMotion) {
       for (let i = 0; i < 25; i++) {
         const x = (i * 137.9 + time * (3 + i % 4)) % w;
@@ -1051,21 +1115,21 @@ export class Renderer {
     c.lineWidth = 1;
     c.strokeRect(x - 7, y - 7, 150, 118);
     c.globalAlpha = .65;
-    c.drawImage(this.terrain, x, y, 136, 102);
+    c.drawImage(this.minimapTerrain, x, y, MINIMAP_W, MINIMAP_H);
     c.globalAlpha = 1;
     for (const exit of EXITS) {
       c.fillStyle = '#c5d9a3';
-      c.fillRect(x + exit.x / WORLD.width * 136 - 2, y + exit.y / WORLD.height * 102 - 2, 4, 4);
+      c.fillRect(x + exit.x / WORLD.width * MINIMAP_W - 2, y + exit.y / WORLD.height * MINIMAP_H - 2, 4, 4);
     }
     // Living hostiles are deliberately visible on the tactical view.
     c.fillStyle = '#df554f';
     for (const enemy of state.enemies) {
       if (enemy.hp <= 0) continue;
-      c.fillRect(x + enemy.x / WORLD.width * 136 - 1.5, y + enemy.y / WORLD.height * 102 - 1.5, 3, 3);
+      c.fillRect(x + enemy.x / WORLD.width * MINIMAP_W - 1.5, y + enemy.y / WORLD.height * MINIMAP_H - 1.5, 3, 3);
     }
     c.fillStyle = '#ffdb9a';
     c.beginPath();
-    c.arc(x + p.x / WORLD.width * 136, y + p.y / WORLD.height * 102, 3, 0, TAU);
+    c.arc(x + p.x / WORLD.width * MINIMAP_W, y + p.y / WORLD.height * MINIMAP_H, 3, 0, TAU);
     c.fill();
     c.fillStyle = '#c5c9b3';
     c.font = '9px "Noto Sans JP", sans-serif';
