@@ -1,3 +1,4 @@
+import { GRAPHICS_PRESETS, GRAPHICS_QUALITIES, sanitizeGraphicsQuality } from './graphics';
 import { weaponArt } from './weaponArt';
 import '@fontsource/noto-sans-jp/400.css';
 import '@fontsource/noto-serif-jp/400.css';
@@ -264,7 +265,7 @@ function camp() {
   });
 }
 function settings() {
-  openModal('settings', '旅の設定', 'PREFERENCES', `<label class="setting-row"><span><b>旅人の名前</b><small>オンラインの戦場でも表示されます</small></span><input id="name-input" type="text" maxlength="16" value="${esc(save.name)}" /></label><label class="setting-row"><span><b>効果音</b><small>攻撃・被弾・操作の音量</small></span><input id="volume-input" type="range" min="0" max="100" value="${save.volume * 100}" aria-label="効果音の音量" /></label><label class="setting-row"><span><b>環境音</b><small>風・焚き火・獣の声の音量</small></span><input id="ambient-input" type="range" min="0" max="100" value="${save.ambientVolume * 100}" aria-label="環境音の音量" /></label><button class="secondary-button full" id="test-attack-sound" type="button">攻撃音を試す</button><label class="setting-row"><span><b>演出を抑える</b><small>漂う灰のアニメーションを停止</small></span><input id="motion-input" type="checkbox" ${save.reducedMotion ? 'checked' : ''} /></label><div class="notice">ソロではメニューを開くと一時停止します。オンラインの戦場はメニュー表示中も進行します。データはこの端末のブラウザに保存されます。</div><button class="primary-button full" id="save-settings">設定を保存 ${icon('check')}</button>`);
+  openModal('settings', '旅の設定', 'PREFERENCES', `<label class="setting-row"><span><b>旅人の名前</b><small>オンラインの戦場でも表示されます</small></span><input id="name-input" type="text" maxlength="16" value="${esc(save.name)}" /></label><label class="setting-row"><span><b>効果音</b><small>攻撃・被弾・操作の音量</small></span><input id="volume-input" type="range" min="0" max="100" value="${save.volume * 100}" aria-label="効果音の音量" /></label><label class="setting-row"><span><b>環境音</b><small>風・焚き火・獣の声の音量</small></span><input id="ambient-input" type="range" min="0" max="100" value="${save.ambientVolume * 100}" aria-label="環境音の音量" /></label><button class="secondary-button full" id="test-attack-sound" type="button">攻撃音を試す</button><label class="setting-row"><span><b>グラフィック品質</b><small>解像度と描画効果を調整</small></span><select id="quality-input" aria-describedby="quality-description">${GRAPHICS_QUALITIES.map(q => `<option value="${q}" ${save.graphicsQuality === q ? 'selected' : ''}>${GRAPHICS_PRESETS[q].label}</option>`).join('')}</select></label><p class="notice" id="quality-description" aria-live="polite">${GRAPHICS_PRESETS[save.graphicsQuality].description}「設定を保存」で反映されます。</p><label class="setting-row"><span><b>演出を抑える</b><small>漂う灰のアニメーションを停止</small></span><input id="motion-input" type="checkbox" ${save.reducedMotion ? 'checked' : ''} /></label><div class="notice">ソロではメニューを開くと一時停止します。オンラインの戦場はメニュー表示中も進行します。データはこの端末のブラウザに保存されます。</div><button class="primary-button full" id="save-settings">設定を保存 ${icon('check')}</button>`);
   $('test-attack-sound').onclick = () => {
     const volume = Number($<HTMLInputElement>('volume-input').value) / 100;
     audio.setSfxVolume(volume);
@@ -273,7 +274,8 @@ function settings() {
     if (volume === 0) { toast('効果音が0です。音量を上げてからお試しください。'); return; }
     audio.attack('sword');
   };
-  $('save-settings').onclick = () => { save.name = $<HTMLInputElement>('name-input').value.trim().slice(0, 16) || '名もなき旅人'; save.volume = Number($<HTMLInputElement>('volume-input').value) / 100; save.ambientVolume = Number($<HTMLInputElement>('ambient-input').value) / 100; save.reducedMotion = $<HTMLInputElement>('motion-input').checked; audio.setSfxVolume(save.volume); audio.setAmbientVolume(save.ambientVolume); persist(); tone(); closeModal(); toast('設定を保存しました'); };
+  $('quality-input').onchange = () => { $('quality-description').textContent = GRAPHICS_PRESETS[sanitizeGraphicsQuality($<HTMLElement & HTMLSelectElement>('quality-input').value)].description + '「設定を保存」で反映されます。'; };
+  $('save-settings').onclick = () => { save.name = $<HTMLInputElement>('name-input').value.trim().slice(0, 16) || '名もなき旅人'; save.volume = Number($<HTMLInputElement>('volume-input').value) / 100; save.ambientVolume = Number($<HTMLInputElement>('ambient-input').value) / 100; save.reducedMotion = $<HTMLInputElement>('motion-input').checked; save.graphicsQuality = sanitizeGraphicsQuality($<HTMLElement & HTMLSelectElement>('quality-input').value); renderer.setQuality(save.graphicsQuality); audio.setSfxVolume(save.volume); audio.setAmbientVolume(save.ambientVolume); persist(); tone(); closeModal(); toast('設定を保存しました'); };
 }
 function backpack() {
   const p = getPlayer(); if (!p || !playing) return;
@@ -302,7 +304,7 @@ function backpack() {
     backpack();
   };
 }
-function pauseMenu() { if (!playing) return; openModal('pause', mode === 'solo' ? '焚き火のひと休み' : '遠征メニュー', 'RAID MENU', `<div class="pause-emblem">${icon('fire')}</div><p class="center muted">${mode === 'solo' ? 'ソロ遠征を一時停止しています。' : 'オンラインの戦場は進行しています。'}</p><div class="button-stack"><button class="primary-button" id="resume">遠征を続ける ${icon('chevron')}</button><button class="secondary-button" id="pause-help">操作ガイド</button><button class="danger-button" id="abandon">遠征を放棄する</button></div><p class="muted center">放棄すると、今回の戦利品は失われます。</p>`); $('resume').onclick = closeModal; $('pause-help').onclick = help; $('abandon').onclick = () => { openModal('abandon', '遠征を放棄しますか？', 'LEAVE THE FRONTIER', `<p class="modal-description">今回の戦利品はすべて失われます。倉庫の物資は失われません。</p><div class="button-stack"><button class="danger-button" id="confirm-abandon">戦利品を失って拠点に戻る</button><button class="secondary-button" id="cancel-abandon">遠征を続ける</button></div>`); $('confirm-abandon').onclick = () => { save.raids++; persist(); returnToBase(); toast('遠征を放棄しました'); }; $('cancel-abandon').onclick = closeModal; }; }
+function pauseMenu() { if (!playing) return; openModal('pause', mode === 'solo' ? '焚き火のひと休み' : '遠征メニュー', 'RAID MENU', `<div class="pause-emblem">${icon('fire')}</div><p class="center muted">${mode === 'solo' ? 'ソロ遠征を一時停止しています。' : 'オンラインの戦場は進行しています。'}</p><div class="button-stack"><button class="primary-button" id="resume">遠征を続ける ${icon('chevron')}</button><button class="secondary-button" id="pause-help">操作ガイド</button><button class="secondary-button" id="pause-settings">画質・音量の設定</button><button class="danger-button" id="abandon">遠征を放棄する</button></div><p class="muted center">放棄すると、今回の戦利品は失われます。</p>`); $('resume').onclick = closeModal; $('pause-help').onclick = help; $('pause-settings').onclick = settings; $('abandon').onclick = () => { openModal('abandon', '遠征を放棄しますか？', 'LEAVE THE FRONTIER', `<p class="modal-description">今回の戦利品はすべて失われます。倉庫の物資は失われません。</p><div class="button-stack"><button class="danger-button" id="confirm-abandon">戦利品を失って拠点に戻る</button><button class="secondary-button" id="cancel-abandon">遠征を続ける</button></div>`); $('confirm-abandon').onclick = () => { save.raids++; persist(); returnToBase(); toast('遠征を放棄しました'); }; $('cancel-abandon').onclick = closeModal; }; }
 function setMode(next: 'solo' | 'online') {
   if (playing || connecting) return;
   if (next === 'online' && staticHost) { toast('GitHub Pages版はソロ専用です。オンラインPvPvEはCloudflare版で利用できます。'); return; }
@@ -532,7 +534,7 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
 window.addEventListener('blur', () => { clearInput(); if (playing && mode === 'solo' && !currentModal) pauseMenu(); });
-document.addEventListener('visibilitychange', () => { if (document.hidden) { clearInput(); if (playing && mode === 'solo' && !currentModal) pauseMenu(); } });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { clearInput(); if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'input', input })); if (playing && mode === 'solo' && !currentModal) pauseMenu(); } });
 const canvas = $<HTMLCanvasElement>('world');
 const aimAt = (e: PointerEvent) => {
   const rect = canvas.getBoundingClientRect();
@@ -616,6 +618,13 @@ function syncCombatAudio(p: Player, dt: number) {
 let renderClock = -1, renderAccumulator = TARGET_FRAME_MS;
 function frame(now: number) {
   const delta = Math.min((now - last) / 1000, .1); last = now;
+  // Hidden tabs need neither simulation catch-up nor canvas/audio work. Online
+  // authority stays on the server; visibilitychange already clears held input.
+  if (document.hidden) {
+    renderClock = -1; renderAccumulator = 0; accumulator = 0;
+    requestAnimationFrame(frame);
+    return;
+  }
   if (playing && !resultShown) {
     const p = getPlayer();
     if (!currentModal) {
@@ -647,10 +656,13 @@ function frame(now: number) {
   audio.update(delta);
   if (renderPlayer && !cursorWorld) cursorWorld = { x: renderPlayer.x + Math.cos(input.angle) * 150, y: renderPlayer.y + Math.sin(input.angle) * 150 };
   // Time accumulation keeps Canvas output at ~60fps on 90/120/144Hz displays without the uneven 45fps cadence of skipping every other frame.
-  renderAccumulator += renderClock < 0 ? TARGET_FRAME_MS : Math.min(now - renderClock, 100);
+  // Keep active combat at 60fps; scenery and paused solo menus need only 30.
+  const frameMs = 1000 / (!playing || (paused && mode === 'solo') ? 30 : GRAPHICS_PRESETS[save.graphicsQuality].fps);
+  renderAccumulator += renderClock < 0 ? frameMs : Math.min(now - renderClock, 100);
   renderClock = now;
-  if (renderAccumulator >= TARGET_FRAME_MS - .5) {
-    renderAccumulator = Math.max(0, renderAccumulator - TARGET_FRAME_MS);
+  if (renderAccumulator >= frameMs - .5) {
+    renderAccumulator = Math.max(0, renderAccumulator - frameMs) % frameMs;
+    renderer.setQuality(save.graphicsQuality);
     renderer.reducedMotion = save.reducedMotion;
     renderer.draw(game, playerId, !playing, mapOpen, now / 1000, renderPlayer && cursorWorld ? { ...cursorWorld, hot: input.attack || renderPlayer.swing > 0 } : undefined);
   }

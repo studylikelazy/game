@@ -1,3 +1,4 @@
+import { sanitizeGraphicsQuality, type GraphicsQuality } from './graphics';
 import { ITEMS, SLOTS, isGear, sanitizeGear, type BagEntry, type Gear, type MaterialKind, type Slot } from './items';
 
 export interface Save {
@@ -23,9 +24,10 @@ export interface Save {
   /** Environmental bed (wind, fire, wildlife) volume, kept separate from combat SFX. */
   ambientVolume: number;
   reducedMotion: boolean;
+  graphicsQuality: GraphicsQuality;
 }
 
-const initial = (): Save => ({ version: 2, name: '名もなき旅人', coins: 1250, stash: [], loadout: {}, meleeChoice: 'sword', raids: 0, escapes: 0, kills: 0, collected: 0, claimed: [], camp: {}, daily: { date: '', progress: 0, claimed: false }, volume: .25, ambientVolume: .55, reducedMotion: false });
+const initial = (): Save => ({ version: 2, name: '名もなき旅人', coins: 1250, stash: [], loadout: {}, meleeChoice: 'sword', raids: 0, escapes: 0, kills: 0, collected: 0, claimed: [], camp: {}, daily: { date: '', progress: 0, claimed: false }, volume: .25, ambientVolume: .55, reducedMotion: false, graphicsQuality: 'high' });
 
 const MATERIALS = Object.keys(ITEMS) as MaterialKind[];
 
@@ -84,6 +86,7 @@ export function loadSave(): Save {
     }
     safe.volume = typeof raw.volume === 'number' && Number.isFinite(raw.volume) ? Math.max(0, Math.min(1, raw.volume)) : .25;
     safe.ambientVolume = typeof raw.ambientVolume === 'number' && Number.isFinite(raw.ambientVolume) ? Math.max(0, Math.min(1, raw.ambientVolume)) : .55;
+    safe.graphicsQuality = sanitizeGraphicsQuality(raw.graphicsQuality);
     safe.reducedMotion = raw.reducedMotion === true;
     return safe;
   } catch { return initial(); }
