@@ -2,7 +2,7 @@ name: Test and publish game
 
 on:
   push:
-    branches: [main, arena/68fdc8a7-game, arena/24efa9d6-game]
+    branches: [main, 'arena/*']
   pull_request:
     branches: [main]
   workflow_dispatch:
