@@ -1,7 +1,10 @@
 import '@fontsource/noto-sans-jp/400.css';
 import '@fontsource/noto-serif-jp/400.css';
 import './style.css';
-import { addPlayer, bagValue, bagWeight, distance, EXITS, idleInput, ITEMS, makeGame, stepGame, WEAPONS, type GameState, type ItemKind, type Player } from './game';
+import { addPlayer, bagValue, bagWeight, distance, EXITS, idleInput, ITEMS, makeGame, meleeGear, bowGear, stepGame, STARTER_GEAR, starterMelee, equipInField, weaponDps, weaponKind, type GameState, type Player } from './game';
+import { RARITIES, SLOTS, SLOT_LABELS, baseOf, encodeLoadout, entryValue, globalStats, isGear, weaponProfile, type BagEntry, type Gear, type Material, type Slot } from './items';
+import { entryCard, entryLabel, gearCard, gearTooltip, materialCard } from './itemcard';
+import { characterSheetHtml, gearSummary, slotGrid, SLOT_ICONS } from './gearui';
 import { icon, raven } from './icons';
 import { Renderer } from './renderer';
 import { loadSave, storeSave } from './save';
@@ -11,8 +14,10 @@ const app = document.querySelector<HTMLDivElement>('#app')!;
 const TARGET_FRAME_MS = 1000 / 60;
 const save = loadSave();
 const staticHost = import.meta.env.MODE === 'pages';
-let game: GameState = makeGame(), playerId = 'local', playing = false, paused = false, mapOpen = false, mode: 'solo' | 'online' = 'solo', primary: 'sword' | 'katana' = 'sword';
+let game: GameState = makeGame(), playerId = 'local', playing = false, paused = false, mapOpen = false, mode: 'solo' | 'online' = 'solo';
 let socket: WebSocket | null = null, connecting = false, resultShown = false, sendAt = 0, hudAt = 0, gameStartedAt = 0, currentModal = '', bagOpen = false;
+/** The loadout worn when the raid started, so a failed raid can restore it. */
+let raidStartLoadout: Partial<Record<Slot, Gear>> = {};
 let onlineAvailable = false;
 const keys = new Set<string>();
 const input = idleInput();
@@ -137,10 +142,10 @@ app.innerHTML = `
           <div class="north">N<span>⌃</span><i></i></div>
           <div class="map-coordinates">N 48° 21′ &nbsp; E 12° 04′<span>ASHENFELL CARTOGRAPHIC SOCIETY</span></div>
           <div class="map-bottom" id="lobby-map-bottom"><div class="map-legend"><span><i class="legend-loot"></i>探索地点</span><span><i class="legend-exit"></i>脱出地点</span></div><div class="weather">${icon('leaf')}晩秋 <span>曇り · 8°C</span></div></div>
-          <div class="game-hud hidden" id="game-hud"><div class="raid-timer">${icon('clock')}<b id="timer">12:00</b><span>残り時間</span></div><div class="game-top-actions"><button id="pause-button" title="メニュー (Esc)">II</button><button id="fullscreen-button" class="fullscreen-button" title="全画面表示" aria-label="全画面表示" aria-pressed="false">${icon('fullscreen')}</button></div><div class="vitals"><div class="vital-line"><span>HP</span><div class="bar"><i id="hp-bar"></i></div><b id="hp-label">100</b></div><div class="vital-line stamina"><span>ST</span><div class="bar"><i id="st-bar"></i></div><b id="st-label">100</b></div></div><div class="hotbar"><button id="slot-primary" class="hot-slot selected"><kbd>1</kbd>${icon('sword')}<span>剣</span></button><button id="slot-bow" class="hot-slot"><kbd>2</kbd>${icon('bow')}<span id="arrows">24</span></button><button id="slot-heal" class="hot-slot"><kbd>Q</kbd>${icon('potion')}<span id="heals">3</span></button><button id="slot-bag" class="hot-slot"><kbd>Tab</kbd>${icon('backpack')}<span id="bag-count">0/12</span></button></div><div id="interaction" class="interaction hidden"></div><div id="game-message" class="game-message"></div><div class="touch-controls"><div class="touch-pad"><button data-touch="w">↑</button><button data-touch="a">←</button><button data-touch="s">↓</button><button data-touch="d">→</button></div><div class="touch-actions"><button data-action="interact">E</button><button data-action="dodge">回避</button><button data-action="attack" class="touch-attack">${icon('sword')}</button></div></div></div>
+          <div class="game-hud hidden" id="game-hud"><div class="raid-timer">${icon('clock')}<b id="timer">12:00</b><span>残り時間</span></div><div class="game-top-actions"><button id="pause-button" title="メニュー (Esc)">II</button><button id="fullscreen-button" class="fullscreen-button" title="全画面表示" aria-label="全画面表示" aria-pressed="false">${icon('fullscreen')}</button></div><div class="vitals"><div class="vital-line"><span>HP</span><div class="bar"><i id="hp-bar"></i></div><b id="hp-label">100</b></div><div class="vital-line shield"><span>ES</span><div class="bar"><i id="es-bar"></i></div><b id="es-label">0</b></div><div class="vital-line stamina"><span>ST</span><div class="bar"><i id="st-bar"></i></div><b id="st-label">100</b></div></div><div class="hotbar"><button id="slot-primary" class="hot-slot selected"><kbd>1</kbd>${icon('sword')}<span id="slot-primary-label">近接</span></button><button id="slot-bow" class="hot-slot"><kbd>2</kbd>${icon('bow')}<span id="arrows">24</span></button><button id="slot-heal" class="hot-slot"><kbd>Q</kbd>${icon('potion')}<span id="heals">3</span></button><button id="slot-bag" class="hot-slot"><kbd>Tab</kbd>${icon('backpack')}<span id="bag-count">0/12</span></button></div><div id="interaction" class="interaction hidden"></div><div id="game-message" class="game-message"></div><div class="touch-controls"><div class="touch-pad"><button data-touch="w">↑</button><button data-touch="a">←</button><button data-touch="s">↓</button><button data-touch="d">→</button></div><div class="touch-actions"><button data-action="interact">E</button><button data-action="dodge">回避</button><button data-action="attack" class="touch-attack">${icon('sword')}</button></div></div></div>
           <div class="map-grain"></div>
         </section>
-        <aside class="loadout-panel"><div class="panel-title"><div><span class="eyebrow">YOUR LOADOUT</span><h2 id="loadout-heading">出撃準備</h2></div>${icon('shield')}</div><div class="character-preview">${portrait}<div class="character-label"><span class="small-dot"></span>準備完了</div><span class="character-class">WANDERER</span><span class="character-number">I</span></div><div class="equipment-heading"><span>装備</span><span>初期装備 · 支給品</span></div><button class="weapon-card" id="weapon-select" title="クリックで剣と刀を切り替え"><span class="weapon-illustration">${icon('sword')}</span><span><small>メイン武器 <span class="tier">I</span></small><b id="weapon-name">鉄のロングソード</b><em id="weapon-detail">斬撃 28 · 片手剣</em></span>${icon('chevron')}</button><div class="equipment-grid"><div class="equipment-item">${icon('bow')}<span>狩人の長弓</span><small>矢 ×24</small></div><div class="equipment-item">${icon('shield')}<span>旅人の外套</span><small>軽装備</small></div><div class="equipment-item">${icon('potion')}<span>治療薬</span><small>×3</small></div><div class="equipment-item">${icon('backpack')}<span>革の背嚢</span><small>12スロット</small></div></div><div class="loadout-weight">${icon('backpack')}<span id="weight-text">持ち帰り容量</span><b id="weight-value">22.0 <small>kg</small></b></div><div class="deploy-section"><div class="deploy-note">${icon('help')}<span id="deploy-note">倒れると、遠征中の戦利品を失います。</span></div><button class="deploy-button" id="deploy">${icon('sword')}<span>出撃する<small>ENTER THE FRONTIER</small></span>${icon('chevron')}</button><div class="server-status"><span class="small-dot"></span><span id="server-label">ソロ遠征</span><span id="server-detail">ローカルセーブ</span></div></div></aside>
+        <aside class="loadout-panel"><div class="panel-title"><div><span class="eyebrow">YOUR LOADOUT</span><h2 id="loadout-heading">出撃準備</h2></div>${icon('shield')}</div><div class="character-preview">${portrait}<div class="character-label"><span class="small-dot"></span>準備完了</div><span class="character-class">WANDERER</span><span class="character-number">I</span></div><div class="equipment-heading"><span>装備</span><span id="gear-heading-note">初期装備 · 支給品</span></div><button class="weapon-card" id="weapon-select" title="クリックで剣と刀を切り替え"><span class="weapon-illustration" id="weapon-icon">${icon('sword')}</span><span><small>メイン武器 <span class="tier" id="weapon-tier">I</span></small><b id="weapon-name">鉄のロングソード</b><em id="weapon-detail">斬撃 28 · 片手剣</em></span>${icon('chevron')}</button><div class="equipment-grid" id="equipment-grid"></div><button class="gear-sheet-button" id="gear-sheet">${icon('scroll')}装備とステータス<small>CHARACTER SHEET</small></button><div class="loadout-weight">${icon('backpack')}<span id="weight-text">持ち帰り容量</span><b id="weight-value">22.0 <small>kg</small></b></div><div class="deploy-section"><div class="deploy-note">${icon('help')}<span id="deploy-note">倒れると、遠征中の戦利品を失います。</span></div><button class="deploy-button" id="deploy">${icon('sword')}<span>出撃する<small>ENTER THE FRONTIER</small></span>${icon('chevron')}</button><div class="server-status"><span class="small-dot"></span><span id="server-label">ソロ遠征</span><span id="server-detail">ローカルセーブ</span></div></div></aside>
       </div>
       <section class="contracts-section"><div class="section-heading"><h2>${icon('scroll')}旅人への依頼<span>CONTRACTS</span></h2><button id="all-quests">すべての依頼 ${icon('chevron')}</button></div><div class="contract-grid" id="contract-grid"></div></section>
       <footer class="footer"><span>${icon('shield')}灰の中にも、帰る場所はある。</span><div><span class="footer-dot"></span>保存先：このブラウザ<span class="footer-separator">/</span><button id="controls-link">操作ガイド <kbd>?</kbd></button></div></footer>
@@ -176,12 +181,15 @@ function closeModal() {
   document.querySelectorAll<HTMLElement>('[data-nav]').forEach(el => el.classList.toggle('active', el.dataset.nav === 'raid' && el.classList.contains('nav-item')));
   if (playing) $('world').focus();
 }
-function help() { openModal('help', '生き延びるために', 'FIELD GUIDE', `<div class="guide-intro">${icon('compass')}<p>ここは、王国が見捨てた灰の辺境。<br>物資を探し、敵を退け、<strong>脱出地点でEを5秒間</strong>押し続けて帰還しましょう。</p></div><div class="guide-steps"><div><b>01</b><h3>準備する</h3><p>剣か刀を選択。弓と治療薬は毎回支給されます。</p></div><div><b>02</b><h3>探索する</h3><p>木箱・薬草・倒した敵の近くでE。12枠・22kgまで。</p></div><div><b>03</b><h3>帰還する</h3><p>マップの緑の出口へ。帰還した物資は倉庫で保管。</p></div></div><div class="key-guide">${[['W A S D / ↑↓←→', '移動'], ['マウス', '照準'], ['左クリック', '攻撃・射撃'], ['Shift', '走る · スタミナ消費'], ['Space', '回避 · 短時間無敵'], ['1 / 2', '近接武器 / 弓'], ['Q', '治療薬 · HP +45'], ['E 長押し', '物資回収 / 脱出'], ['Tab', 'バックパック'], ['M', '戦域マップ'], ['Esc', 'メニュー · ソロのみ一時停止']].map(([k, v]) => `<div><kbd>${k}</kbd><span>${v}</span></div>`).join('')}</div><div class="notice">時間切れ・死亡・遠征の放棄では戦利品を失います。初期装備は無料で再支給されます。タッチ端末では左下のパッドで移動、右下のボタンで攻撃・回避・回収。画面をドラッグして照準を合わせ、攻撃ボタンは近くの敵へ自動照準します。</div><button class="primary-button full" id="guide-done">準備はできた ${icon('chevron')}</button>`); $('guide-done').onclick = closeModal; }
+function help() { openModal('help', '生き延びるために', 'FIELD GUIDE', `<div class="guide-intro">${icon('compass')}<p>ここは、王国が見捨てた灰の辺境。<br>物資を探し、敵を退け、<strong>脱出地点でEを5秒間</strong>押し続けて帰還しましょう。</p></div><div class="guide-steps"><div><b>01</b><h3>装備を組む</h3><p>剣・斧・槌・短刀・巨剣・弓・弩。防具は頭・胸・手・足・盾・護符・指輪の7箇所。</p></div><div><b>02</b><h3>探索する</h3><p>木箱・薬草・倒した敵の近くでE。12枠・22kgまで。拾った装備はTabから即装着。</p></div><div><b>03</b><h3>帰還する</h3><p>マップの緑の出口へ。帰還した物資は倉庫で保管。</p></div></div><div class="key-guide">${[['W A S D / ↑↓←→', '移動'], ['マウス', '照準'], ['左クリック', '攻撃・射撃'], ['Shift', '走る · スタミナ消費'], ['Space', '回避 · 短時間無敵'], ['1 / 2', '近接武器 / 弓'], ['Q', '治療薬 · HP +45'], ['E 長押し', '物資回収 / 脱出'], ['Tab', 'バックパック'], ['M', '戦域マップ'], ['Esc', 'メニュー · ソロのみ一時停止']].map(([k, v]) => `<div><kbd>${k}</kbd><span>${v}</span></div>`).join('')}</div><div class="notice">時間切れ・死亡・遠征の放棄では戦利品を失います。初期装備は無料で再支給されます。装備は「ノーマル→マジック→レア→ユニーク」の4レアリティ。レアは最大6つの修飾を、ユニークは固有效果を持ちます。タッチ端末では左下のパッドで移動、右下のボタンで攻撃・回避・回収。画面をドラッグして照準を合わせ、攻撃ボタンは近くの敵へ自動照準します。</div><button class="primary-button full" id="guide-done">準備はできた ${icon('chevron')}</button>`); $('guide-done').onclick = closeModal; }
 function stash() {
   const total = bagValue(save.stash);
-  openModal('stash', '旅人の倉庫', 'YOUR STASH', `<div class="stash-summary"><span>保管物資 <b>${save.stash.length}</b></span><span>売却価値 <b>${fmt(total)} 銀貨</b></span></div>${save.stash.length ? `<div class="item-grid">${save.stash.map(i => `<div class="item-card ${ITEMS[i.kind].rarity}">${icon(i.kind)}<b>${ITEMS[i.kind].name}</b><small>×${i.amount} · ${fmt(ITEMS[i.kind].value * i.amount)} 銀貨</small></div>`).join('')}</div><button class="primary-button full" id="visit-trader">商人と取引する ${icon('chevron')}</button>` : `<div class="empty-state">${icon('stash')}<h3>物語は、空の背嚢から。</h3><p>遠征で手に入れた物資は、無事に帰還するとここへ保管されます。</p><button class="primary-button" id="stash-start">遠征の準備へ ${icon('chevron')}</button></div>`}<p class="muted">倉庫と進行状況はこのブラウザに保存されます。オンライン時も経済データはローカル管理です。</p>`);
+  const gear = save.stash.filter(isGear);
+  const materials = save.stash.filter((e): e is Material => !isGear(e));
+  openModal('stash', '旅人の倉庫', 'YOUR STASH', `<div class="stash-summary"><span>保管物資 <b>${save.stash.length}</b></span><span>売却価値 <b>${fmt(total)} 銀貨</b></span></div>${save.stash.length ? `${gear.length ? `<h3 class="subheading">装備品 <span>${gear.length}点</span></h3><div class="item-grid">${gear.map(g => gearCard(g, `<button class="small-button" data-equip="${g.id}">装備する</button>`)).join('')}</div>` : ''}${materials.length ? `<h3 class="subheading">物資</h3><div class="item-grid">${materials.map(m => materialCard(m)).join('')}</div>` : ''}<button class="primary-button full" id="visit-trader">商人と取引する ${icon('chevron')}</button>` : `<div class="empty-state">${icon('stash')}<h3>物語は、空の背嚢から。</h3><p>遠征で手に入れた物資は、無事に帰還するとここへ保管されます。</p><button class="primary-button" id="stash-start">遠征の準備へ ${icon('chevron')}</button></div>`}<p class="muted">倉庫と進行状況はこのブラウザに保存されます。オンライン時も経済データはローカル管理です。</p>`);
   if ($('visit-trader')) $('visit-trader').onclick = trader;
   if ($('stash-start')) $('stash-start').onclick = closeModal;
+  document.querySelectorAll<HTMLButtonElement>('[data-equip]').forEach(b => b.onclick = () => equipFromStash(b.dataset.equip!));
 }
 function quests() {
   openModal('quests', '旅人への依頼', 'CONTRACT BOARD', `<p class="modal-description">境界の砦から届いた仕事。成果を持ち帰り、報酬を受け取ろう。</p><div class="quest-list">${contracts.map(q => `<div class="quest-row"><div class="quest-emblem">${icon(q.icon)}</div><div><h3>${q.title}</h3><p>${q.desc}</p><small>${Math.min(q.goal, q.value())} / ${q.goal}</small></div><div><b class="gold">${q.reward} 銀貨</b><button class="small-button" data-claim="${q.id}" ${q.value() < q.goal || save.claimed.includes(q.id) ? 'disabled' : ''}>${save.claimed.includes(q.id) ? '受取済み' : q.value() >= q.goal ? '報酬を受け取る' : '進行中'}</button></div></div>`).join('')}</div><div class="notice">討伐数は生還した遠征のみ記録されます。各依頼の報酬は一度だけ受け取れます。</div>`);
@@ -189,8 +197,12 @@ function quests() {
 }
 function trader() {
   const value = bagValue(save.stash);
-  openModal('trader', '境界の行商人', 'THE TRAVELING MERCHANT', `<div class="merchant-quote">${icon('trader')}<p>「灰に埋もれたものにも、価値はある。<br>無事に帰ったのなら、見せてみな。」</p></div><div class="trade-balance">所持銀貨 <b>${fmt(save.coins)} ${icon('coin')}</b></div><h3 class="subheading">倉庫から売却</h3>${save.stash.length ? `<div class="trade-items">${(Object.keys(ITEMS) as ItemKind[]).filter(k => save.stash.some(i => i.kind === k)).map(k => { const count = save.stash.filter(i => i.kind === k).reduce((s, i) => s + i.amount, 0); return `<div class="trade-row"><span class="trade-icon ${ITEMS[k].rarity}">${icon(k)}</span><span><b>${ITEMS[k].name}</b><small>倉庫 ×${count}</small></span><button class="small-button" data-sell="${k}">すべて売る · ${fmt(count * ITEMS[k].value)}</button></div>`; }).join('')}</div><button class="primary-button full" id="sell-all">物資をすべて売却 ${icon('coin')} ${fmt(value)}</button>` : '<div class="trade-empty">売却できる物資がありません。遠征で探してみましょう。</div>'}<div class="notice">支給装備・矢・治療薬は毎回無料です。売却した銀貨と依頼報酬が旅の成果として蓄積されます。</div>`);
-  document.querySelectorAll<HTMLButtonElement>('[data-sell]').forEach(b => b.onclick = () => { const k = b.dataset.sell as ItemKind; const sold = save.stash.filter(i => i.kind === k); save.coins += bagValue(sold); save.stash = save.stash.filter(i => i.kind !== k); persist(); trader(); tone(800); toast(`${ITEMS[k].name}を売却しました`); });
+  const materials = save.stash.filter((e): e is Material => !isGear(e));
+  const gear = save.stash.filter(isGear);
+  const kinds = Array.from(new Set(materials.map(m => m.kind)));
+  openModal('trader', '境界の行商人', 'THE TRAVELING MERCHANT', `<div class="merchant-quote">${icon('trader')}<p>「灰に埋もれたものにも、価値はある。<br>無事に帰ったのなら、見せてみな。」</p></div><div class="trade-balance">所持銀貨 <b>${fmt(save.coins)} ${icon('coin')}</b></div><h3 class="subheading">物資から売却</h3>${kinds.length ? `<div class="trade-items">${kinds.map(k => { const count = materials.filter(m => m.kind === k).reduce((s, i) => s + i.amount, 0); return `<div class="trade-row"><span class="trade-icon rarity-${ITEMS[k].rarity}">${icon(k)}</span><span><b>${ITEMS[k].name}</b><small>倉庫 ×${count}</small></span><button class="small-button" data-sell="${k}">すべて売る · ${fmt(count * ITEMS[k].value)}</button></div>`; }).join('')}</div>` : ''}${gear.length ? `<h3 class="subheading">装備品から売却</h3><div class="trade-items">${gear.map(g => `<div class="trade-row"><span class="trade-icon rarity-${g.rarity}">${icon(baseOf(g)?.icon ?? 'shield')}</span><span><b style="color:${RARITIES[g.rarity].color}">${g.name}</b><small>アイテムレベル ${g.ilvl} · ${RARITIES[g.rarity].label}</small></span><button class="small-button" data-sell-gear="${g.id}">売る · ${fmt(entryValue(g))}</button></div>`).join('')}</div>` : ''}${save.stash.length ? `<button class="primary-button full" id="sell-all">物資をすべて売却 ${icon('coin')} ${fmt(value)}</button>` : '<div class="trade-empty">売却できる物資がありません。遠征で探してみましょう。</div>'}<div class="notice">支給装備・矢・治療薬は毎回無料です。売却した銀貨と依頼報酬が旅の成果として蓄積されます。</div>`);
+  document.querySelectorAll<HTMLButtonElement>('[data-sell]').forEach(b => b.onclick = () => { const k = b.dataset.sell as keyof typeof ITEMS; const sold = save.stash.filter((i): i is Material => !isGear(i) && i.kind === k); save.coins += bagValue(sold); save.stash = save.stash.filter(i => isGear(i) || i.kind !== k); persist(); trader(); tone(800); toast(`${ITEMS[k].name}を売却しました`); });
+  document.querySelectorAll<HTMLButtonElement>('[data-sell-gear]').forEach(b => b.onclick = () => { const id = b.dataset.sellGear!; const gearEntry = save.stash.find((i): i is Gear => isGear(i) && i.id === id); if (!gearEntry) return; save.coins += entryValue(gearEntry); save.stash = save.stash.filter(i => !(isGear(i) && i.id === id)); persist(); trader(); tone(800); toast(`${gearEntry.name}を売却しました`); });
   if ($('sell-all')) $('sell-all').onclick = () => { save.coins += bagValue(save.stash); save.stash = []; persist(); trader(); tone(800, .2); toast('すべての物資を売却しました'); };
 }
 function settings() {
@@ -200,7 +212,15 @@ function settings() {
 function backpack() {
   const p = getPlayer(); if (!p || !playing) return;
   bagOpen = true;
-  openModal('bag', '遠征のバックパック', 'FIELD INVENTORY', `<div class="stash-summary"><span>容量 <b>${p.bag.length} / 12</b></span><span>重量 <b>${bagWeight(p.bag).toFixed(1)} / 22.0 kg</b></span></div><div class="item-grid">${p.bag.map(i => `<div class="item-card ${ITEMS[i.kind].rarity}">${icon(i.kind)}<b>${ITEMS[i.kind].name}</b><small>×${i.amount} · ${fmt(ITEMS[i.kind].value * i.amount)} 銀貨</small></div>`).join('')}${Array.from({ length: Math.max(0, 12 - p.bag.length) }, () => '<div class="item-card empty">＋</div>').join('')}</div><div class="notice">生還した場合の売却価値：<strong>${fmt(bagValue(p.bag))} 銀貨</strong><br>${mode === 'online' ? 'オンライン遠征は進行中です。周囲に注意してください。' : 'ソロ遠征は一時停止中です。'}</div>`);
+  const gear = p.bag.filter(isGear);
+  const materials = p.bag.filter((e): e is Material => !isGear(e));
+  const loadoutHtml = SLOTS.map(slot => {
+    const worn = p.loadout[slot];
+    const info = worn ? RARITIES[worn.rarity] : null;
+    return `<div class="equipped-row${worn ? ` rarity-${worn.rarity}` : ' empty'}"><span class="equipped-icon">${icon(SLOT_ICONS[slot])}</span><span><small>${SLOT_LABELS[slot]}</small><b${worn ? ` style="color:${info!.color}"` : ''}>${worn ? worn.name : '装備なし'}</b></span>${worn ? `<em>${gearSummary(worn)}</em>` : ''}</div>`;
+  }).join('');
+  openModal('bag', '遠征のバックパック', 'FIELD INVENTORY', `<div class="stash-summary"><span>容量 <b>${p.bag.length} / 12</b></span><span>重量 <b>${bagWeight(p.bag).toFixed(1)} / 22.0 kg</b></span></div><h3 class="subheading">現在の装備 <span>EQUIPPED</span></h3><div class="equipped-list">${loadoutHtml}</div><h3 class="subheading">装備品 <span>GEAR</span></h3>${gear.length ? `<div class="item-grid">${gear.map(g => gearCard(g, `<button class="small-button" data-field-equip="${g.id}">装備</button>`)).join('')}</div>` : '<p class="muted">装備品はまだ見つかっていません。</p>'}<h3 class="subheading">物資 <span>MATERIALS</span></h3><div class="item-grid">${materials.map(m => materialCard(m)).join('')}${Array.from({ length: Math.max(0, 12 - p.bag.length) }, () => '<div class="item-card empty">＋</div>').join('')}</div><div class="notice">生還した場合の売却価値：<strong>${fmt(bagValue(p.bag))} 銀貨</strong><br>装備すると外していた装備がバックパックへ戻ります。${mode === 'online' ? 'オンライン遠征は進行中です。' : 'ソロ遠征は一時停止中です。'}</div>`);
+  document.querySelectorAll<HTMLButtonElement>('[data-field-equip]').forEach(b => b.onclick = () => { const g = p.bag.find(i => isGear(i) && i.id === b.dataset.fieldEquip); if (mode === 'online' && g && isGear(g)) { socket?.send(JSON.stringify({ type: 'equip', id: g.id })); toast('装備変更を送信しました'); return; } if (g && isGear(g) && equipInField(p, g)) { tone(620, .12); toast(`${g.name}を装備した`); backpack(); } });
 }
 function pauseMenu() { if (!playing) return; openModal('pause', mode === 'solo' ? '焚き火のひと休み' : '遠征メニュー', 'RAID MENU', `<div class="pause-emblem">${icon('fire')}</div><p class="center muted">${mode === 'solo' ? 'ソロ遠征を一時停止しています。' : 'オンラインの戦場は進行しています。'}</p><div class="button-stack"><button class="primary-button" id="resume">遠征を続ける ${icon('chevron')}</button><button class="secondary-button" id="pause-help">操作ガイド</button><button class="danger-button" id="abandon">遠征を放棄する</button></div><p class="muted center">放棄すると、今回の戦利品は失われます。</p>`); $('resume').onclick = closeModal; $('pause-help').onclick = help; $('abandon').onclick = () => { openModal('abandon', '遠征を放棄しますか？', 'LEAVE THE FRONTIER', `<p class="modal-description">今回の戦利品はすべて失われます。倉庫の物資は失われません。</p><div class="button-stack"><button class="danger-button" id="confirm-abandon">戦利品を失って拠点に戻る</button><button class="secondary-button" id="cancel-abandon">遠征を続ける</button></div>`); $('confirm-abandon').onclick = () => { save.raids++; persist(); returnToBase(); toast('遠征を放棄しました'); }; $('cancel-abandon').onclick = closeModal; }; }
 function setMode(next: 'solo' | 'online') {
@@ -217,18 +237,99 @@ function nearestTarget(p: Player, range: number): { x: number; y: number } | nul
   for (const o of game.players) { if (o.id === playerId || o.status !== 'alive') continue; const d = distance(p, o); if (d < bestD) { bestD = d; best = o; } }
   return best;
 }
-function setPrimary() { if (playing || connecting) return; primary = primary === 'sword' ? 'katana' : 'sword'; $('weapon-name').textContent = WEAPONS[primary].name; $('weapon-detail').textContent = primary === 'sword' ? '斬撃 28 · 片手剣' : '斬撃 22 · 高速連撃'; document.querySelector('.weapon-illustration')!.innerHTML = icon(primary); input.weapon = primary; tone(360); }
+/** The gear the traveller would wear right now: the saved loadout plus the issued starters. */
+function currentLoadout(): Partial<Record<Slot, Gear>> {
+  const loadout: Partial<Record<Slot, Gear>> = { ...save.loadout };
+  if (!loadout.melee) loadout.melee = starterMelee(save.meleeChoice);
+  if (!loadout.bow) loadout.bow = STARTER_GEAR.bow;
+  return loadout;
+}
+
+/** Moves a piece of gear from the stash into the worn slot, returning the old one to the stash. */
+function equipFromStash(gearId: string) {
+  const index = save.stash.findIndex(entry => isGear(entry) && entry.id === gearId);
+  if (index < 0) return;
+  const gear = save.stash[index] as Gear;
+  if (!SLOTS.includes(gear.slot)) return;
+  save.stash.splice(index, 1);
+  const previous = save.loadout[gear.slot];
+  save.loadout[gear.slot] = gear;
+  if (previous) save.stash.push(previous);
+  persist();
+  renderLoadout();
+  toast(`${gear.name}を装備しました`);
+  tone(620, .12);
+  if (currentModal === 'gear' || currentModal === 'stash') characterSheet();
+}
+
+/** Takes a worn piece off and puts it back into the stash. */
+function unequipSlot(slot: Slot) {
+  const gear = save.loadout[slot];
+  if (!gear) return;
+  delete save.loadout[slot];
+  save.stash.push(gear);
+  persist();
+  renderLoadout();
+  toast(`${gear.name}を外しました`);
+  tone(360, .1);
+  if (currentModal === 'gear') characterSheet();
+}
+
+/** Redraws the lobby equipment panel from the saved loadout. */
+function renderLoadout() {
+  const loadout = currentLoadout();
+  const melee = loadout.melee!;
+  const meleeProfile = weaponProfile(melee, globalStats(loadout));
+  $('weapon-name').textContent = melee.name;
+  $('weapon-name').style.color = RARITIES[melee.rarity].color;
+  $('weapon-detail').textContent = `物理 ${meleeProfile.min}-${meleeProfile.max} · ${meleeProfile.attackSpeed.toFixed(2)}/秒 · ${RARITIES[melee.rarity].label}`;
+  $('weapon-tier').textContent = `Lv ${melee.ilvl}`;
+  $('weapon-icon').innerHTML = icon(baseOf(melee)?.icon ?? 'sword');
+  $('gear-heading-note').textContent = Object.keys(save.loadout).length ? `装備 ${Object.keys(save.loadout).length} / ${SLOTS.length}` : '初期装備 · 支給品';
+  $('equipment-grid').innerHTML = slotGrid(save.loadout, { melee: starterMelee(save.meleeChoice), bow: STARTER_GEAR.bow });
+  $('equipment-grid').querySelectorAll<HTMLElement>('[data-slot]').forEach(el => el.onclick = () => characterSheet(el.dataset.slot as Slot));
+}
+
+/** The character sheet: worn gear on the left, the stash of spares on the right. */
+function characterSheet(focusSlot?: Slot) {
+  if (playing || connecting) return;
+  const loadout = currentLoadout();
+  const globals = globalStats(loadout);
+  const spareGear = save.stash.filter(isGear);
+  const sheet = characterSheetHtml(loadout, globals, {
+    meleeDps: weaponDps(loadout.melee ?? null, globals),
+    bowDps: weaponDps(loadout.bow ?? null, globals),
+    life: 100 + globals.life,
+    stamina: 100 + globals.stamina,
+  });
+  const spares = spareGear.length ? `<div class="item-grid">${spareGear.map(g => gearCard(g, `<button class="small-button" data-equip="${g.id}">装備</button>`)).join('')}</div>` : '<p class="muted">予備の装備はありません。遠征で探しましょう。</p>';
+  const detail = focusSlot && loadout[focusSlot]
+    ? `<h3 class="subheading">${SLOT_LABELS[focusSlot]}の詳細<span>DETAIL</span></h3>${gearTooltip(loadout[focusSlot]!)}`
+    : '';
+  openModal('gear', '旅人の装備', 'CHARACTER SHEET', `${sheet}<button class="secondary-button" id="starter-toggle">支給武器：${save.meleeChoice === 'sword' ? '剣' : '刀'}（切替）</button>${detail}<h3 class="subheading">予備の装備<span>SPARE GEAR</span></h3>${spares}<p class="muted">装備は拠点で変更できます。遠征中はバックパック（Tab）から装備し替えられます。</p>`);
+  document.querySelectorAll<HTMLButtonElement>('[data-equip]').forEach(b => b.onclick = () => equipFromStash(b.dataset.equip!));
+  document.querySelectorAll<HTMLElement>('.doll-slot.filled').forEach(el => el.onclick = () => characterSheet(el.dataset.slot as Slot));
+  document.querySelectorAll<HTMLElement>('.doll-slot.filled').forEach(el => {
+    const slot = el.dataset.slot as Slot;
+    el.insertAdjacentHTML('beforeend', `<button class="small-button unequip" data-unequip="${slot}">外す</button>`);
+  });
+  $('starter-toggle').onclick = () => { save.meleeChoice = save.meleeChoice === 'sword' ? 'katana' : 'sword'; persist(); renderLoadout(); characterSheet(); };
+  document.querySelectorAll<HTMLButtonElement>('[data-unequip]').forEach(b => b.onclick = event => { event.stopPropagation(); unequipSlot(b.dataset.unequip as Slot); });
+}
 function enterRaid() {
-  playing = true; paused = false; resultShown = false; mapOpen = false; bagOpen = false; gameStartedAt = game.time; accumulator = 0; lastSwing = 0; lastHp = 100; lastBag = 0; currentModal = ''; $('modal-root').innerHTML = ''; clearInput(); input.weapon = primary;
+  playing = true; paused = false; resultShown = false; mapOpen = false; bagOpen = false; gameStartedAt = game.time; raidStartLoadout = { ...save.loadout }; accumulator = 0; lastSwing = 0; lastHp = 100; lastBag = 0; currentModal = ''; $('modal-root').innerHTML = ''; clearInput(); input.weapon = 'melee';
   document.body.classList.add('in-raid'); $('game-hud').classList.remove('hidden'); $('map-title').classList.add('hidden'); $('lobby-map-bottom').classList.add('hidden'); $('map-status').textContent = mode === 'solo' ? 'ソロ遠征 · PvE' : 'オンライン · PvPvE'; $('loadout-heading').textContent = '遠征中'; $('deploy').innerHTML = `${icon('backpack')}<span>バックパック<small>FIELD INVENTORY</small></span>${icon('chevron')}`;
-  $('slot-primary').innerHTML = `<kbd>1</kbd>${icon(primary)}<span>${primary === 'sword' ? '剣' : '刀'}</span>`;
+  const p = getPlayer();
+  const melee = p ? meleeGear(p) : null;
+  $('slot-primary').innerHTML = `<kbd>1</kbd>${icon(melee ? baseOf(melee)?.icon ?? 'sword' : 'sword')}<span id="slot-primary-label">近接</span>`;
+  $('slot-bow').innerHTML = `<kbd>2</kbd>${icon('bow')}<span id="arrows">${p?.arrows ?? 24}</span>`;
   $('world').focus(); tone(180, .3); toast('物資を探して、緑の脱出地点へ。Eを5秒長押しで帰還。');
 }
-function startSolo() { mode = 'solo'; game = makeGame(); playerId = 'local'; addPlayer(game, playerId, save.name, primary); enterRaid(); }
+function startSolo() { mode = 'solo'; game = makeGame(); playerId = 'local'; addPlayer(game, playerId, save.name, save.meleeChoice, save.loadout); enterRaid(); }
 function connectOnline(room: string) {
   if (connecting) return;
   connecting = true; $('connect-room').textContent = '戦場に接続中…'; $<HTMLButtonElement>('connect-room').disabled = true;
-  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/raid?room=${encodeURIComponent(room)}&name=${encodeURIComponent(save.name)}&weapon=${primary}`);
+  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/raid?room=${encodeURIComponent(room)}&name=${encodeURIComponent(save.name)}&weapon=${save.meleeChoice}&loadout=${encodeURIComponent(encodeLoadout(save.loadout))}`);
   socket = ws;
   const timeout = setTimeout(() => { if (connecting) { ws.close(); fail(); } }, 9000);
   let joined = false;
@@ -246,23 +347,31 @@ function deploy() {
   $('connect-room').onclick = () => { const room = $<HTMLInputElement>('room-input').value.trim(); if (!/^[a-zA-Z0-9-]{1,24}$/.test(room)) { $('connection-error').textContent = '合言葉は半角英数字とハイフンで1〜24文字にしてください。'; return; } connectOnline(room); };
 }
 function returnToBase() {
-  playing = false; connecting = false; resultShown = false; const old = socket; socket = null; old?.close(); game = makeGame(); playerId = 'local'; currentModal = ''; paused = false; mapOpen = false; clearInput(); $('modal-root').innerHTML = ''; document.body.classList.remove('in-raid'); leaveImmersive(); $('game-hud').classList.add('hidden'); $('map-title').classList.remove('hidden'); $('lobby-map-bottom').classList.remove('hidden'); $('map-status').textContent = '出撃可能エリア'; $('loadout-heading').textContent = '出撃準備'; $('deploy').innerHTML = `${icon('sword')}<span>出撃する<small>ENTER THE FRONTIER</small></span>${icon('chevron')}`; $('weight-text').textContent = '持ち帰り容量'; $('weight-value').innerHTML = '22.0 <small>kg</small>'; setMode(mode);
+  playing = false; connecting = false; resultShown = false; const old = socket; socket = null; old?.close(); game = makeGame(); playerId = 'local'; currentModal = ''; paused = false; mapOpen = false; clearInput(); $('modal-root').innerHTML = ''; document.body.classList.remove('in-raid'); leaveImmersive(); $('game-hud').classList.add('hidden'); $('map-title').classList.remove('hidden'); $('lobby-map-bottom').classList.remove('hidden'); $('map-status').textContent = '出撃可能エリア'; $('loadout-heading').textContent = '出撃準備'; $('deploy').innerHTML = `${icon('sword')}<span>出撃する<small>ENTER THE FRONTIER</small></span>${icon('chevron')}`; $('weight-text').textContent = '持ち帰り容量'; $('weight-value').innerHTML = '22.0 <small>kg</small>'; setMode(mode); renderLoadout();
 }
 function finishRaid(p: Player) {
   if (resultShown) return;
   resultShown = true; clearInput(); const finishedSocket = socket; socket = null; finishedSocket?.close(); const survived = p.status === 'extracted'; save.raids++;
-  if (survived) { save.stash.push(...p.bag); save.escapes++; save.kills += p.kills; save.collected += p.bag.reduce((s, i) => s + i.amount, 0); }
+  if (survived) {
+    // The gear worn at the moment of extraction stays worn; everything else in the bag comes home loose.
+    for (const slot of SLOTS) { const gear = p.loadout[slot]; if (gear) save.loadout[slot] = gear; }
+    save.stash.push(...p.bag);
+    save.escapes++; save.kills += p.kills; save.collected += p.bag.reduce((s, i) => s + (isGear(i) ? 1 : i.amount), 0);
+  } else {
+    // A failed raid costs the gear that was found inside it, but the issued kit stays.
+    save.loadout = { ...raidStartLoadout };
+  }
   persist(); tone(survived ? 600 : 100, .6);
   const elapsed = Math.floor(game.time - gameStartedAt);
-  openModal('result', survived ? '灰の向こうへ、生還。' : '辺境に、名を残して。', survived ? 'EXTRACTION SUCCESSFUL' : 'LOST IN THE FRONTIER', `<div class="result-emblem ${survived ? 'success' : 'failure'}">${icon(survived ? 'exit' : 'skull')}</div><p class="center muted">${survived ? '戦利品は倉庫に届けられました。次の物語は、焚き火のそばで。' : game.ended ? '遠征時間が終了しました。戦利品は失われました。' : '倒れてしまいました。戦利品は失われましたが、次の遠征が待っています。'}</p><div class="result-stats"><div><small>遠征時間</small><b>${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}</b></div><div><small>討伐数</small><b>${p.kills}</b></div><div><small>持ち帰り価値</small><b>${survived ? fmt(bagValue(p.bag)) : 0}<small> 銀貨</small></b></div></div>${survived && p.bag.length ? `<div class="result-loot">${p.bag.map(i => `<span class="${ITEMS[i.kind].rarity}">${icon(i.kind)}${ITEMS[i.kind].name} ×${i.amount}</span>`).join('')}</div>` : ''}<button class="primary-button full" id="return-base">拠点へ戻る ${icon('chevron')}</button>`, 'result-modal'); $('return-base').onclick = returnToBase;
+  openModal('result', survived ? '灰の向こうへ、生還。' : '辺境に、名を残して。', survived ? 'EXTRACTION SUCCESSFUL' : 'LOST IN THE FRONTIER', `<div class="result-emblem ${survived ? 'success' : 'failure'}">${icon(survived ? 'exit' : 'skull')}</div><p class="center muted">${survived ? '戦利品は倉庫に届けられました。次の物語は、焚き火のそばで。' : game.ended ? '遠征時間が終了しました。戦利品は失われました。' : '倒れてしまいました。戦利品は失われましたが、次の遠征が待っています。'}</p><div class="result-stats"><div><small>遠征時間</small><b>${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}</b></div><div><small>討伐数</small><b>${p.kills}</b></div><div><small>持ち帰り価値</small><b>${survived ? fmt(bagValue(p.bag)) : 0}<small> 銀貨</small></b></div></div>${survived && p.bag.length ? `<div class="result-loot">${p.bag.map(i => entryLabel(i)).join('')}</div>` : ''}<button class="primary-button full" id="return-base">拠点へ戻る ${icon('chevron')}</button>`, 'result-modal'); $('return-base').onclick = returnToBase;
 }
 function clearInput() { keys.clear(); input.x = 0; input.y = 0; input.attack = false; input.interact = false; input.heal = false; input.dodge = false; input.sprint = false; mouseAttack = false; aimPointer = null; cursorWorld = null; touchState.attack = false; touchState.interact = false; touchState.dodge = false; }
 function toggleMap() { if (!playing) { openModal('map-info', '黒松の辺境', 'THE NORTHERN MARCHES', `<div class="map-info-art">${icon('compass')}</div><p class="modal-description">古い交易路に沿って、朽ちた村と修道院が点在する森林地帯。野盗と狼が徘徊し、価値ある遺物が打ち捨てられています。</p><div class="guide-steps"><div><b>01</b><h3>巡礼者の小道</h3><p>南西。出撃地点から最も近い脱出路。</p></div><div><b>02</b><h3>北の見張り門</h3><p>北東。修道院の先にある古い門。</p></div><div><b>03</b><h3>渡し守の桟橋</h3><p>南東。野営地を越え、川沿いへ。</p></div></div><div class="notice">12分以内に帰還してください。戦場ではMキーで全体マップを表示できます。川は浅瀬として通行可能です。</div>`); } else if (!currentModal) { mapOpen = !mapOpen; } }
 function updateHUD() {
   const p = getPlayer(); if (!p) return;
   const seconds = Math.max(0, Math.ceil(game.duration - game.time)); $('timer').textContent = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`; $('timer').classList.toggle('danger-text', seconds < 90);
-  $('hp-bar').style.width = `${p.hp}%`; $('st-bar').style.width = `${p.stamina}%`; $('hp-label').textContent = String(Math.ceil(p.hp)); $('st-label').textContent = String(Math.ceil(p.stamina)); $('arrows').textContent = String(p.arrows); $('heals').textContent = String(p.heals); $('bag-count').textContent = `${p.bag.length}/12`;
-  $('slot-primary').classList.toggle('selected', input.weapon !== 'bow'); $('slot-bow').classList.toggle('selected', input.weapon === 'bow'); $('weight-text').textContent = `戦利品 ${p.bag.length}/12`; $('weight-value').innerHTML = `${bagWeight(p.bag).toFixed(1)} <small>/22 kg</small>`;
+  $('hp-bar').style.width = `${p.hp / p.maxHp * 100}%`; $('st-bar').style.width = `${p.stamina / (100 + p.globals.stamina) * 100}%`; $('hp-label').textContent = String(Math.ceil(p.hp)); $('st-label').textContent = String(Math.ceil(p.stamina)); $('arrows').textContent = String(p.arrows); $('heals').textContent = String(p.heals); $('bag-count').textContent = `${p.bag.length}/12`;
+  $('slot-primary').classList.toggle('selected', input.weapon !== 'bow'); $('slot-bow').classList.toggle('selected', input.weapon === 'bow'); $('es-bar').style.width = `${p.globals.energyShield ? p.es / p.globals.energyShield * 100 : 0}%`; $('es-label').textContent = String(Math.ceil(p.es)); $('weight-text').textContent = `戦利品 ${p.bag.length}/12`; $('weight-value').innerHTML = `${bagWeight(p.bag).toFixed(1)} <small>/22 kg</small>`;
   if (mode === 'online') $('server-label').textContent = `旅人 ${game.players.filter(p => p.status === 'alive').length}/8`;
   const exit = EXITS.find(e => distance(p, e) < 65), loot = game.loot.find(l => !l.opened && distance(p, l) < 74);
   $('interaction').classList.toggle('hidden', (!exit && !loot) || p.status !== 'alive');
@@ -275,8 +384,9 @@ function updateHUD() {
 // UI actions.
 document.querySelectorAll<HTMLElement>('[data-nav]').forEach(el => el.onclick = () => { const nav = el.dataset.nav; if (connecting) { toast('接続処理が終わるまでお待ちください'); return; } if (playing && ['stash', 'trader', 'quests'].includes(nav!)) { toast('このメニューは拠点で利用できます'); return; } ({ raid: () => currentModal ? closeModal() : playing ? pauseMenu() : void 0, stash, quests, trader, help, settings } as Record<string, () => void>)[nav!]?.(); });
 document.querySelector('.brand-mark')!.addEventListener('click', e => { e.preventDefault(); if (playing) pauseMenu(); else closeModal(); });
-$('solo-mode').onclick = () => setMode('solo'); $('online-mode').onclick = () => setMode('online'); $('weapon-select').onclick = setPrimary; $('deploy').onclick = deploy; $('all-quests').onclick = () => playing ? toast('依頼は拠点で確認できます') : quests(); $('contract-grid').onclick = () => playing ? toast('依頼は拠点で確認できます') : quests(); $('controls-link').onclick = help; $('map-button').onclick = toggleMap; $('pause-button').onclick = pauseMenu;
-$('slot-primary').onclick = () => { input.weapon = primary; }; $('slot-bow').onclick = () => { input.weapon = 'bow'; }; $('slot-heal').onclick = () => { input.heal = true; setTimeout(() => input.heal = false, 150); }; $('slot-bag').onclick = backpack;
+renderLoadout();
+$('solo-mode').onclick = () => setMode('solo'); $('online-mode').onclick = () => setMode('online'); $('weapon-select').onclick = () => characterSheet('melee'); $('gear-sheet').onclick = () => characterSheet(); $('deploy').onclick = deploy; $('all-quests').onclick = () => playing ? toast('依頼は拠点で確認できます') : quests(); $('contract-grid').onclick = () => playing ? toast('依頼は拠点で確認できます') : quests(); $('controls-link').onclick = help; $('map-button').onclick = toggleMap; $('pause-button').onclick = pauseMenu;
+$('slot-primary').onclick = () => { input.weapon = 'melee'; }; $('slot-bow').onclick = () => { input.weapon = 'bow'; }; $('slot-heal').onclick = () => { input.heal = true; setTimeout(() => input.heal = false, 150); }; $('slot-bag').onclick = backpack;
 
 // Mobile immersive raid: use the Fullscreen API when available, otherwise hide the site chrome with body.immersive-raid (iOS Safari, embedded browsers).
 const fullscreenButton = $<HTMLButtonElement>('fullscreen-button');
@@ -322,7 +432,7 @@ window.addEventListener('keydown', e => {
   const key = e.key.toLowerCase();
   if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ', 'tab', 'shift', 'q', 'e', '1', '2', 'm'].includes(key)) e.preventDefault();
   keys.add(key);
-  if (key === '1') input.weapon = primary; if (key === '2') input.weapon = 'bow';
+  if (key === '1') input.weapon = 'melee'; if (key === '2') input.weapon = 'bow';
   if (key === 'tab' && !e.repeat) backpack(); if (key === 'm' && !e.repeat) toggleMap();
 });
 window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));

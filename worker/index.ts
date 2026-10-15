@@ -1,4 +1,5 @@
-import { addPlayer, idleInput, makeGame, sanitizeInput, stepGame, type GameState } from '../src/game';
+import { addPlayer, equipInField, idleInput, makeGame, sanitizeInput, stepGame, type GameState } from '../src/game';
+import { decodeLoadout, isGear } from '../src/items';
 
 interface Env { ASSETS: Fetcher; RAID_ROOMS: DurableObjectNamespace }
 
@@ -34,7 +35,10 @@ export class RaidRoom {
     const id = crypto.randomUUID();
     const name = (url.searchParams.get('name') || '名もなき旅人').replace(/[<>\u0000-\u001f]/g, '').slice(0, 16);
     const primary = url.searchParams.get('weapon') === 'katana' ? 'katana' : 'sword';
-    addPlayer(this.game, id, name, primary);
+    // The client only sends the four facts that define each item; the server rolls the affixes again.
+    let loadout = {};
+    try { loadout = decodeLoadout(JSON.parse(url.searchParams.get('loadout') || 'null')); } catch { loadout = {}; }
+    addPlayer(this.game, id, name, primary, loadout);
     this.clients.set(server, { id, lastInput: Date.now(), lastMessage: 0 });
     server.send(JSON.stringify({ type: 'joined', id, state: this.game }));
     server.addEventListener('message', (event: MessageEvent) => {
@@ -46,7 +50,8 @@ export class RaidRoom {
       try {
         const message = JSON.parse(event.data);
         const p = this.game.players.find(p => p.id === id);
-        if (message.type === 'input' && p) { p.input = sanitizeInput(message.input, p.primary); info.lastInput = now; }
+        if (message.type === 'equip' && p && typeof message.id === 'string') { const gear = p.bag.find(entry => isGear(entry) && entry.id === message.id); if (gear && isGear(gear)) equipInField(p, gear); }
+        if (message.type === 'input' && p) { p.input = sanitizeInput(message.input, p.meleeChoice); info.lastInput = now; }
       } catch { /* Malformed client packets never affect room state. */ }
     });
     const close = () => {
