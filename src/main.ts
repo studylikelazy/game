@@ -15,6 +15,7 @@ let onlineAvailable = false;
 const keys = new Set<string>();
 const input = idleInput();
 let aimPointer: number | null = null, mouseAttack = false;
+let cursorWorld: { x: number; y: number } | null = null;
 const coarsePointer = () => matchMedia('(pointer: coarse)').matches;
 const fmt = (n: number) => n.toLocaleString('ja-JP');
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -172,7 +173,7 @@ function finishRaid(p: Player) {
   const elapsed = Math.floor(game.time - gameStartedAt);
   openModal('result', survived ? '灰の向こうへ、生還。' : '辺境に、名を残して。', survived ? 'EXTRACTION SUCCESSFUL' : 'LOST IN THE FRONTIER', `<div class="result-emblem ${survived ? 'success' : 'failure'}">${icon(survived ? 'exit' : 'skull')}</div><p class="center muted">${survived ? '戦利品は倉庫に届けられました。次の物語は、焚き火のそばで。' : game.ended ? '遠征時間が終了しました。戦利品は失われました。' : '倒れてしまいました。戦利品は失われましたが、次の遠征が待っています。'}</p><div class="result-stats"><div><small>遠征時間</small><b>${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}</b></div><div><small>討伐数</small><b>${p.kills}</b></div><div><small>持ち帰り価値</small><b>${survived ? fmt(bagValue(p.bag)) : 0}<small> 銀貨</small></b></div></div>${survived && p.bag.length ? `<div class="result-loot">${p.bag.map(i => `<span class="${ITEMS[i.kind].rarity}">${icon(i.kind)}${ITEMS[i.kind].name} ×${i.amount}</span>`).join('')}</div>` : ''}<button class="primary-button full" id="return-base">拠点へ戻る ${icon('chevron')}</button>`, 'result-modal'); $('return-base').onclick = returnToBase;
 }
-function clearInput() { keys.clear(); input.x = 0; input.y = 0; input.attack = false; input.interact = false; input.heal = false; input.dodge = false; input.sprint = false; mouseAttack = false; aimPointer = null; touchState.attack = false; touchState.interact = false; touchState.dodge = false; }
+function clearInput() { keys.clear(); input.x = 0; input.y = 0; input.attack = false; input.interact = false; input.heal = false; input.dodge = false; input.sprint = false; mouseAttack = false; aimPointer = null; cursorWorld = null; touchState.attack = false; touchState.interact = false; touchState.dodge = false; }
 function toggleMap() { if (!playing) { openModal('map-info', '黒松の辺境', 'THE NORTHERN MARCHES', `<div class="map-info-art">${icon('compass')}</div><p class="modal-description">古い交易路に沿って、朽ちた村と修道院が点在する森林地帯。野盗と狼が徘徊し、価値ある遺物が打ち捨てられています。</p><div class="guide-steps"><div><b>01</b><h3>巡礼者の小道</h3><p>南西。出撃地点から最も近い脱出路。</p></div><div><b>02</b><h3>北の見張り門</h3><p>北東。修道院の先にある古い門。</p></div><div><b>03</b><h3>渡し守の桟橋</h3><p>南東。野営地を越え、川沿いへ。</p></div></div><div class="notice">12分以内に帰還してください。戦場ではMキーで全体マップを表示できます。川は浅瀬として通行可能です。</div>`); } else if (!currentModal) { mapOpen = !mapOpen; } }
 function updateHUD() {
   const p = getPlayer(); if (!p) return;
@@ -218,19 +219,29 @@ window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
 window.addEventListener('blur', () => { clearInput(); if (playing && mode === 'solo' && !currentModal) pauseMenu(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) { clearInput(); if (playing && mode === 'solo' && !currentModal) pauseMenu(); } });
 const canvas = $<HTMLCanvasElement>('world');
-const aimAt = (e: PointerEvent) => { const rect = canvas.getBoundingClientRect(), pos = renderer.screenToWorld(e.clientX - rect.left, e.clientY - rect.top), p = getPlayer(); if (p) input.angle = Math.atan2(pos.y - p.y, pos.x - p.x); };
+const aimAt = (e: PointerEvent) => {
+  const rect = canvas.getBoundingClientRect();
+  const pos = renderer.screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
+  const p = getPlayer();
+  cursorWorld = pos;
+  if (p) input.angle = Math.atan2(pos.y - p.y, pos.x - p.x);
+};
 canvas.addEventListener('pointermove', e => { if (!playing || currentModal) return; if (e.pointerType === 'mouse' || aimPointer === e.pointerId) aimAt(e); });
 canvas.addEventListener('pointerdown', e => {
   if (!playing || currentModal) return;
   canvas.focus();
   if (e.pointerType === 'mouse') {
+    aimAt(e);
     if (e.button === 0) { mouseAttack = true; canvas.setPointerCapture(e.pointerId); }
   } else {
-    // Touch/pen drags on the canvas steer the aim; the round button handles attacking.
+    // Touch/pen drags use the actual finger position; at rest the reticle sits 150px along the aim direction.
     aimPointer = e.pointerId; canvas.setPointerCapture(e.pointerId); aimAt(e);
   }
 });
-window.addEventListener('pointerup', e => { if (e.pointerType === 'mouse') mouseAttack = false; if (aimPointer === e.pointerId) aimPointer = null; });
+window.addEventListener('pointerup', e => {
+  if (e.pointerType === 'mouse') mouseAttack = false;
+  if (aimPointer === e.pointerId) { aimPointer = null; cursorWorld = null; }
+});
 canvas.addEventListener('pointercancel', clearInput);
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 const touchState = { attack: false, interact: false, dodge: false };
@@ -246,13 +257,15 @@ function frame(now: number) {
       input.y = Number(keys.has('s') || keys.has('arrowdown')) - Number(keys.has('w') || keys.has('arrowup'));
       input.sprint = keys.has('shift'); input.interact = keys.has('e') || touchState.interact; input.dodge = keys.has(' ') || touchState.dodge; input.heal = keys.has('q') || input.heal;
       input.attack = mouseAttack || touchState.attack;
-      if (coarsePointer()) {
-        if (touchState.attack && p && aimPointer === null) {
+      if (coarsePointer() && p) {
+        if (touchState.attack && aimPointer === null) {
           // Touch aim assist: snap toward the nearest target in range while the attack button is held.
           const target = nearestTarget(p, input.weapon === 'bow' ? 560 : 150);
           if (target) input.angle = Math.atan2(target.y - p.y, target.x - p.x);
           else if (input.x || input.y) input.angle = Math.atan2(input.y, input.x);
         } else if ((input.x || input.y) && aimPointer === null) input.angle = Math.atan2(input.y, input.x);
+        // A touch reticle represents direction, except while a canvas drag is showing the finger itself.
+        if (aimPointer === null) cursorWorld = { x: p.x + Math.cos(input.angle) * 150, y: p.y + Math.sin(input.angle) * 150 };
       }
     }
     if (mode === 'solo' && !paused && p) {
@@ -263,7 +276,10 @@ function frame(now: number) {
     if (!keys.has('q')) input.heal = false;
     if (now - hudAt > 70) { updateHUD(); hudAt = now; }
   }
-  renderer.draw(game, playerId, !playing, mapOpen, save.reducedMotion ? 0 : now / 1000);
+  const renderPlayer = playing ? getPlayer() : undefined;
+  if (renderPlayer && !cursorWorld) cursorWorld = { x: renderPlayer.x + Math.cos(input.angle) * 150, y: renderPlayer.y + Math.sin(input.angle) * 150 };
+  renderer.reducedMotion = save.reducedMotion;
+  renderer.draw(game, playerId, !playing, mapOpen, now / 1000, renderPlayer && cursorWorld ? { ...cursorWorld, hot: input.attack || renderPlayer.swing > 0 } : undefined);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
