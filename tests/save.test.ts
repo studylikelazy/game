@@ -30,6 +30,19 @@ describe('local persistence', () => {
     expect(loadSave().volume).toBe(0);
     expect(loadSave().ambientVolume).toBe(.7);
   });
+  it('persists all graphics presets and safely migrates missing or invalid preferences', () => {
+    for (const graphicsQuality of ['low', 'medium', 'high'] as const) {
+      const save = loadSave(); save.graphicsQuality = graphicsQuality;
+      expect(storeSave(save)).toBe(true);
+      expect(loadSave().graphicsQuality).toBe(graphicsQuality);
+    }
+    for (const graphicsQuality of [undefined, null, 'ultra', 'toString', 0]) {
+      data = JSON.stringify({ version: 2, graphicsQuality });
+      expect(loadSave().graphicsQuality).toBe('high');
+    }
+    data = JSON.stringify({ version: 1 });
+    expect(loadSave().graphicsQuality).toBe('high');
+  });
   it('clamps ambient volume and rejects invalid values', () => {
     data = JSON.stringify({ version: 2, ambientVolume: -3 });
     expect(loadSave().ambientVolume).toBe(0);

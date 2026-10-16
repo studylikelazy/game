@@ -147,6 +147,14 @@ export const WEAPON_BASES: readonly WeaponBase[] = [
   { id: 'greatsword', name: '大地の巨剣', kind: 'greatsword', slot: 'melee', damage: [46, 68], attackSpeed: 1, crit: 5, critMulti: 1.5, range: 96, stamina: 24, handed: 2, icon: 'greatsword', description: '両手持ち。片手武器との併用はできない。' },
   { id: 'bow', name: '狩人の長弓', kind: 'bow', slot: 'bow', damage: [30, 38], attackSpeed: 1.3, crit: 5, critMulti: 1.5, range: 540, stamina: 8, handed: 1, icon: 'bow', starter: true, description: '矢で戦う。距離を保てる唯一の武器。' },
   { id: 'crossbow', name: '城塞の弩', kind: 'crossbow', slot: 'bow', damage: [40, 56], attackSpeed: .95, crit: 4, critMulti: 1.5, range: 500, stamina: 14, handed: 1, icon: 'crossbow', description: '矢の威力が大きい。ただし引き分けに時間がかかる。' },
+  { id: 'duelist_sword', name: '決闘士の細剣', kind: 'sword', slot: 'melee', damage: [17, 25], attackSpeed: 2.2, crit: 10, critMulti: 1.7, range: 82, stamina: 10, handed: 1, icon: 'sword', description: '威力より間合いと急所への一撃を重視した細身の剣。' },
+  { id: 'moon_katana', name: '月影の打刀', kind: 'katana', slot: 'melee', damage: [20, 29], attackSpeed: 2.1, crit: 10, critMulti: 1.6, range: 92, stamina: 13, handed: 1, icon: 'katana', description: '長い刃と引き換えに、振りには余力が必要。' },
+  { id: 'hunter_axe', name: '猟師の手斧', kind: 'axe', slot: 'melee', damage: [22, 32], attackSpeed: 1.8, crit: 6, critMulti: 1.5, range: 68, stamina: 12, handed: 1, icon: 'axe', description: '短い間合いで軽快に振るう手斧。' },
+  { id: 'pilgrim_mace', name: '巡礼の鉄槌', kind: 'mace', slot: 'melee', damage: [24, 35], attackSpeed: 1.6, crit: 5, critMulti: 1.5, range: 70, stamina: 14, handed: 1, icon: 'mace', description: '長旅にも持ち歩ける小ぶりの鉄槌。' },
+  { id: 'glass_dagger', name: '黒曜石の短剣', kind: 'dagger', slot: 'melee', damage: [13, 19], attackSpeed: 2.8, crit: 18, critMulti: 2, range: 56, stamina: 9, handed: 1, icon: 'dagger', description: '極めて短い間合いで急所を狙う黒い刃。' },
+  { id: 'warden_blade', name: '守門の大剣', kind: 'greatsword', slot: 'melee', damage: [39, 57], attackSpeed: 1.15, crit: 5, critMulti: 1.5, range: 102, stamina: 22, handed: 2, icon: 'greatsword', description: '一撃の重さを抑え、間合いを広げた両手剣。' },
+  { id: 'scout_bow', name: '斥候の短弓', kind: 'bow', slot: 'bow', damage: [22, 30], attackSpeed: 1.65, crit: 7, critMulti: 1.5, range: 420, stamina: 6, handed: 1, icon: 'bow', description: '射程を犠牲に速射と省力を選んだ短弓。' },
+  { id: 'siege_crossbow', name: '攻城の重弩', kind: 'crossbow', slot: 'bow', damage: [48, 64], attackSpeed: .8, crit: 5, critMulti: 1.6, range: 580, stamina: 18, handed: 1, icon: 'crossbow', description: '遠くまで届く重い矢。装填は遅い。' },
 ];
 
 export const ARMOUR_BASES: readonly ArmourBase[] = [
@@ -169,6 +177,13 @@ export const ARMOUR_BASES: readonly ArmourBase[] = [
   { id: 'bone_amulet', name: '骨の護符', slot: 'amulet', armour: 0, evasion: 0, energyShield: 6, icon: 'amulet', description: '触れると冷たく、くしゃみが出る。', implicit: { id: 'res_cold', value: 10 } },
   { id: 'brass_ring', name: '真鍮の指輪', slot: 'ring', armour: 0, evasion: 0, energyShield: 0, icon: 'ring', description: '使い込まれた指輪。', implicit: { id: 'life', value: 8 } },
   { id: 'silver_ring', name: '銀の指輪', slot: 'ring', armour: 0, evasion: 0, energyShield: 8, icon: 'ring', description: 'かすかな光の指輪。', implicit: { id: 'es_global', value: 8 } },
+  { id: 'oracle_hood', name: '託宣のフード', slot: 'helmet', armour: 2, evasion: 4, energyShield: 18, icon: 'helmet', description: '装甲を捨て、結界に頼る頭巾。' },
+  { id: 'ranger_coat', name: '森番の上着', slot: 'chest', armour: 10, evasion: 24, energyShield: 0, icon: 'chest', description: '茂みを抜けるための軽い上着。' },
+  { id: 'rune_wraps', name: '刻印の手袋', slot: 'gloves', armour: 2, evasion: 4, energyShield: 12, icon: 'gloves', description: '指先まで結界が包む。' },
+  { id: 'mist_boots', name: '霧渡りの靴', slot: 'boots', armour: 2, evasion: 8, energyShield: 12, icon: 'boots', description: '霧の冷たさを遮る薄い靴。' },
+  { id: 'mirror_shield', name: '鏡面の盾', slot: 'offhand', armour: 8, evasion: 0, energyShield: 26, icon: 'shield', description: '鉄板より結界を重視した盾。' },
+  { id: 'ember_amulet', name: '熾火の護符', slot: 'amulet', armour: 0, evasion: 0, energyShield: 8, icon: 'amulet', description: '火から身を守る赤い護符。', implicit: { id: 'res_fire', value: 12 } },
+  { id: 'storm_ring', name: '雷雲の指輪', slot: 'ring', armour: 0, evasion: 6, energyShield: 0, icon: 'ring', description: '雷鳴の下で拾われた指輪。', implicit: { id: 'res_lightning', value: 12 } },
 ];
 
 /**
@@ -197,6 +212,10 @@ export const UNIQUES: readonly UniqueDef[] = [
   { id: 'u_pilgrim_token', base: 'brass_amulet', name: '巡礼者のトークン', flavour: 'すべての街道に知れる通行証。', affixes: [{ id: 'all_res', value: 16 }, { id: 'life', value: 26 }, { id: 'stamina', value: 20 }] },
   { id: 'u_frost_signet', base: 'silver_ring', name: '凍てつく印戒', flavour: '触れると指先が白くなる。', affixes: [{ id: 'res_cold', value: 22 }, { id: 'es_global', value: 14 }, { id: 'crit_gloves', value: 8 }] },
   { id: 'u_monk_hood', base: 'monk_robe', name: '沈黙のローブ', flavour: '布は吸音している。', affixes: [{ id: 'es_flat', value: 22 }, { id: 'evasion_pct', value: 24 }, { id: 'res_lightning', value: 16 }] },
+  { id: 'u_moon_vow', base: 'moon_katana', name: '月下の誓い', flavour: '夜明けまで、刃は冷たい。', affixes: [{ id: 'cold_damage', value: 13 }, { id: 'crit_weapon', value: 11 }, { id: 'stamina', value: 20 }] },
+  { id: 'u_storm_bolt', base: 'siege_crossbow', name: '落雷の杭', flavour: '城壁に残る、雷の傷跡。', affixes: [{ id: 'lightning_damage', value: 18 }, { id: 'inc_phys', value: 30 }, { id: 'res_lightning', value: 18 }] },
+  { id: 'u_oracle_veil', base: 'oracle_hood', name: '盲目の託宣', flavour: '目を閉じれば、灰の向こうが見える。', affixes: [{ id: 'es_flat', value: 20 }, { id: 'es_pct', value: 28 }, { id: 'life', value: 20 }] },
+  { id: 'u_mist_steps', base: 'mist_boots', name: '霧の足跡', flavour: '去った者の足跡だけが、朝露に残る。', affixes: [{ id: 'move_speed', value: 14 }, { id: 'evasion_flat', value: 18 }, { id: 'res_cold', value: 18 }] },
 ];
 
 /** A finished item. Everything the tooltip shows is derivable from this record. */
@@ -240,6 +259,17 @@ export const WEAPON_BY_ID: Record<string, WeaponBase> = Object.fromEntries(WEAPO
 export const ARMOUR_BY_ID: Record<string, ArmourBase> = Object.fromEntries(ARMOUR_BASES.map(a => [a.id, a]));
 export const UNIQUE_BY_ID: Record<string, UniqueDef> = Object.fromEntries(UNIQUES.map(u => [u.id, u]));
 
+// Catalogue indexes are built once, not on every loot/affix roll. Keep catalogue
+// order intact so existing gear seeds still rebuild the same affixes.
+const BASES_BY_SLOT = Object.fromEntries(SLOTS.map(slot => [slot,
+  [...WEAPON_BASES, ...ARMOUR_BASES].filter(base => base.slot === slot),
+])) as Record<Slot, (WeaponBase | ArmourBase)[]>;
+const AFFIXES_BY_SLOT = Object.fromEntries(SLOTS.map(slot => [slot, {
+  prefixes: AFFIXES.filter(def => def.slots.includes(slot) && def.kind === 'prefix'),
+  suffixes: AFFIXES.filter(def => def.slots.includes(slot) && def.kind === 'suffix'),
+}])) as Record<Slot, { prefixes: AffixDef[]; suffixes: AffixDef[] }>;
+const UNIQUE_BY_BASE = Object.fromEntries(UNIQUES.map(unique => [unique.base, unique]));
+
 /** Deterministic small PRNG so a seed always rebuilds the same item. */
 export function mulberry32(seed: number) {
   let a = seed >>> 0;
@@ -282,9 +312,7 @@ function rollTier(def: AffixDef, ilvl: number, random: () => number) {
 function rollAffixes(slot: Slot, rarity: Rarity, ilvl: number, random: () => number) {
   const info = RARITIES[rarity];
   if (info.maxAffixes <= 0) return [];
-  const pool = AFFIXES.filter(def => def.slots.includes(slot));
-  const prefixes = pool.filter(def => def.kind === 'prefix');
-  const suffixes = pool.filter(def => def.kind === 'suffix');
+  const { prefixes, suffixes } = AFFIXES_BY_SLOT[slot];
   const total = info.minAffixes + Math.floor(random() * (info.maxAffixes - info.minAffixes + 1));
   const maxPrefix = rarity === 'rare' ? 3 : 1;
   const maxSuffix = rarity === 'rare' ? 3 : 1;
@@ -326,7 +354,7 @@ export function rollGear(baseId: string, rarity: Rarity, ilvl: number, seed: num
   const armour = ARMOUR_BY_ID[baseId];
   const baseName = weapon?.name ?? armour?.name ?? baseId;
   const slot: Slot = weapon ? weapon.slot : armour ? armour.slot : 'melee';
-  const unique = UNIQUES.find(u => u.base === baseId);
+  const unique = UNIQUE_BY_BASE[baseId];
   if (rarity === 'unique' && unique) {
     return {
       id: `${baseId}-${(seed >>> 0).toString(36)}`, base: baseId, slot, rarity: 'unique', ilvl, seed,
@@ -345,7 +373,7 @@ export function rollGear(baseId: string, rarity: Rarity, ilvl: number, seed: num
 
 /** Rolls a random base type for a slot. */
 export function randomBase(slot: Slot, random: () => number) {
-  const pool = slot === 'melee' || slot === 'bow' ? WEAPON_BASES.filter(w => w.slot === slot) : ARMOUR_BASES.filter(a => a.slot === slot);
+  const pool = BASES_BY_SLOT[slot];
   return pool[Math.floor(random() * pool.length)];
 }
 

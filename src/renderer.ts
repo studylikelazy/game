@@ -1,3 +1,4 @@
+import { GRAPHICS_PRESETS, graphicsDpr, type GraphicsQuality } from './graphics';
 import { hasSwordArt, LONGSWORD_URL, swordSpriteRect } from './weaponArt';
 import { chestMaterial, dominantElement, ELEMENT_COLORS, facingPose, swingPose, weaponAppearance } from './appearance';
 import { BUILDINGS, EXITS, ITEMS, WORLD, seeded, type Actor, type GameState, type Item, type Player } from './game';
@@ -7,7 +8,7 @@ const TAU = Math.PI * 2;
 /** Braziers that anchor the warm pools of light in the ruined village. Audio uses these for crackle placement. */
 export const FIRES: readonly [number, number][] = [[811, 1046], [1270, 780], [1570, 660]];
 /** High-DPI canvases are capped near this many backbuffer pixels; phones still keep up to 2x. */
-const MAX_BACKBUFFER_PIXELS = 2_000_000;
+
 /** Extra screen pixels kept around the visible rectangle so screen shake never reveals a culling edge. */
 const VIEW_MARGIN_PX = 16;
 /** Characters are painted at this multiple of their collision size so they stay readable. */
@@ -85,6 +86,13 @@ export class Renderer {
   dpr = 1;
   /** Set by main.ts every frame so visual accessibility never changes gameplay. */
   reducedMotion = false;
+  private quality: GraphicsQuality = 'high';
+  setQuality(quality: GraphicsQuality) {
+    if (this.quality === quality) return;
+    this.quality = quality;
+    this.resize();
+  }
+
 
   /** The frame's state, cached so the lighting pass can read it without threading it through every call. */
   private lastState: GameState;
@@ -151,8 +159,7 @@ export class Renderer {
     this.width = r.width;
     this.height = r.height;
     // Scale down only on high-DPI screens whose backbuffer would exceed the pixel budget.
-    const area = Math.max(1, r.width * r.height);
-    this.dpr = Math.max(1, Math.min(devicePixelRatio, 2, Math.sqrt(MAX_BACKBUFFER_PIXELS / area)));
+    this.dpr = graphicsDpr(this.quality, r.width, r.height, devicePixelRatio);
     this.canvas.width = Math.max(1, Math.floor(r.width * this.dpr));
     this.canvas.height = Math.max(1, Math.floor(r.height * this.dpr));
     const lw = Math.max(2, Math.ceil(r.width * LIGHT_SCALE));
@@ -1457,7 +1464,7 @@ export class Renderer {
 
     // Lighting, bloom and atmosphere are all screen-space passes.
     this.applyLighting(c, w, h, time, lobby, fullMap, p);
-    this.applyBloom(c, w, h);
+    if (GRAPHICS_PRESETS[this.quality].bloom) this.applyBloom(c, w, h);
     this.drawAtmosphere(c, w, h, lobby, p, time);
     if (!lobby && p && !fullMap) this.minimap(c, state, p, w - 160, h < 430 ? 52 : 62);
     if (!lobby && !fullMap && aim) this.drawReticle(c, aim, time);
@@ -2077,30 +2084,34 @@ export class Renderer {
       lc.fillRect(light.x - light.radius, light.y - light.radius, light.radius * 2, light.radius * 2);
     }
     lc.restore();
-    // Squaring the field: a cheap brightness threshold that also builds the bloom source.
-    const ba = this.bloomACtx;
-    ba.setTransform(1, 0, 0, 1, 0, 0);
-    ba.globalCompositeOperation = 'source-over';
-    ba.clearRect(0, 0, this.bloomA.width, this.bloomA.height);
-    // Threshold out ambient light before bloom: darkness must not become a grey veil.
-    ba.filter = 'brightness(.85) contrast(3)';
-    ba.drawImage(this.lightMap, 0, 0, this.bloomA.width, this.bloomA.height);
-    ba.filter = 'none';
-    ba.globalCompositeOperation = 'multiply';
-    ba.drawImage(this.lightMap, 0, 0, this.bloomA.width, this.bloomA.height);
-    ba.globalCompositeOperation = 'source-over';
+    if (GRAPHICS_PRESETS[this.quality].bloom) {
+      // Squaring the field: a cheap brightness threshold that also builds the bloom source.
+      const ba = this.bloomACtx;
+      ba.setTransform(1, 0, 0, 1, 0, 0);
+      ba.globalCompositeOperation = 'source-over';
+      ba.clearRect(0, 0, this.bloomA.width, this.bloomA.height);
+      // Threshold out ambient light before bloom: darkness must not become a grey veil.
+      ba.filter = 'brightness(.85) contrast(3)';
+      ba.drawImage(this.lightMap, 0, 0, this.bloomA.width, this.bloomA.height);
+      ba.filter = 'none';
+      ba.globalCompositeOperation = 'multiply';
+      ba.drawImage(this.lightMap, 0, 0, this.bloomA.width, this.bloomA.height);
+      ba.globalCompositeOperation = 'source-over';
+    }
 
     c.save();
     c.globalCompositeOperation = 'multiply';
     c.imageSmoothingEnabled = true;
     c.drawImage(this.lightMap, 0, 0, w, h);
     c.restore();
-    // Screen compositing the squared field gives fire and magic a bleed without a second light pass.
-    c.save();
-    c.globalCompositeOperation = 'screen';
-    c.globalAlpha = .14;
-    c.drawImage(this.bloomA, 0, 0, w, h);
-    c.restore();
+    if (GRAPHICS_PRESETS[this.quality].bloom) {
+      // Screen compositing the squared field gives fire and magic a bleed without a second light pass.
+      c.save();
+      c.globalCompositeOperation = 'screen';
+      c.globalAlpha = .14;
+      c.drawImage(this.bloomA, 0, 0, w, h);
+      c.restore();
+    }
   }
 
   /** Two-stage downsample bloom: bright light and magic bleed past their own edges. */
@@ -2125,7 +2136,7 @@ export class Renderer {
 
   private drawAtmosphere(c: CanvasRenderingContext2D, w: number, h: number, lobby: boolean, p: Player | undefined, time: number) {
     if (this.atmosphere) c.drawImage(this.atmosphere, 0, 0, w, h);
-    if (!lobby && !this.reducedMotion) {
+    if (!lobby && !this.reducedMotion && GRAPHICS_PRESETS[this.quality].atmosphere) {
       // Drifting mist ridges.
       c.save();
       c.globalCompositeOperation = 'lighter';
@@ -2150,7 +2161,7 @@ export class Renderer {
       c.save();
       c.globalAlpha = .055;
       c.globalCompositeOperation = 'overlay';
-      if (this.grainView) {
+      if (this.grainView && GRAPHICS_PRESETS[this.quality].grain) {
         const gx = (time * 97) % 160;
         const gy = (time * 61) % 160;
         c.drawImage(this.grainView, gx, gy);
